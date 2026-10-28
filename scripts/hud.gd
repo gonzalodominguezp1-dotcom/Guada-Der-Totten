@@ -21,6 +21,7 @@ var powerup_label: Label
 var downed_box: VBoxContainer
 var downed_bar: ProgressBar
 var crosshair: Control
+var parts_label: Label
 
 const DAMAGE_SHADER := """
 shader_type canvas_item;
@@ -145,6 +146,12 @@ func _ready() -> void:
 		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		crosshair.add_child(c)
 
+	parts_label = _label(20, Color(0.95, 0.85, 0.6))
+	parts_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
+	parts_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	parts_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	parts_label.visible = false
+
 	hitmarker = _label(30, Color(1, 1, 1))
 	hitmarker.text = "✕"
 	hitmarker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -180,6 +187,14 @@ func set_weapon(n: String) -> void:
 
 func set_health(frac: float) -> void:
 	damage_mat.set_shader_parameter("amount", clampf((1.0 - frac) * 1.6, 0.0, 1.0))
+
+
+func set_parts(parts: Dictionary) -> void:
+	var lines := ["PIEZAS DEL CAÑÓN DE ZURRASPA"]
+	for p in [["calzoncillo", "Calzoncillo sucio"], ["tele", "Tele de tubo"], ["canon", "Cañón"]]:
+		lines.append(("[X] " if parts.get(p[0], false) else "[  ] ") + p[1])
+	parts_label.text = "\n".join(lines)
+	parts_label.visible = true
 
 
 func set_crosshair_visible(v: bool) -> void:

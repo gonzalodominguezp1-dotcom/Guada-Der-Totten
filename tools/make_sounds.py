@@ -311,6 +311,33 @@ def powerup_grab():
     return mix(out, at(voice * 0.6, 0.45, d))
 
 
+def zurraspa_shot():
+    d = 0.9
+    t = t_axis(d)
+    # "bloop" húmedo + zumbido eléctrico de tele vieja
+    blop = tone(lambda tt: 420 * np.exp(-tt * 9) + 70, d) * env_exp(d, 0.12) * 1.2
+    wet = bandpass(noise(d), 300, 1500) * env_exp(d, 0.08) * 1.5
+    zap = tone(lambda tt: 1800 - 1400 * np.clip(tt / 0.3, 0, 1), d, "saw") * env_exp(d, 0.1) * 0.25
+    hum = tone(15734, d) * env_exp(d, 0.15) * 0.05 + tone(60, d, "square") * env_exp(d, 0.2) * 0.15
+    return mix(blop, wet, zap, hum)
+
+
+def splat():
+    d = 0.8
+    body = lowpass_fast(noise(d), 900) * env_exp(d, 0.09) * 3
+    drops = mix(*(at(bandpass(noise(0.08), 600, 2500) * env_exp(0.08, 0.02), 0.08 + i * 0.07 + rng.uniform(0, 0.04), d) for i in range(6)))
+    thud = tone(lambda tt: 110 - 60 * tt, d) * env_exp(d, 0.07)
+    return mix(body, drops, thud)
+
+
+def part_pickup():
+    d = 1.0
+    out = np.zeros(int(SR * d))
+    for i, f in enumerate((784, 988, 1175, 1568)):
+        out += at(tone(f, 0.5) * env_exp(0.5, 0.15) * 0.5, i * 0.08, d)
+    return out
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "assets/sounds"
     os.makedirs(out, exist_ok=True)
@@ -336,6 +363,9 @@ def main():
         "low_ammo": low_ammo_ping(),
         "powerup_spawn": powerup_spawn(),
         "powerup_grab": powerup_grab(),
+        "zurraspa_shot": zurraspa_shot(),
+        "splat": splat(),
+        "part_pickup": part_pickup(),
     }
     for i in range(6):
         sounds[f"zombie_moan_{i}"] = zombie_moan(10 + i, dur=1.4 + 0.3 * (i % 3), base=80 + 12 * i)

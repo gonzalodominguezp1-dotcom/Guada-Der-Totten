@@ -174,6 +174,62 @@ func _process(_delta: float) -> bool:
 		var nm: NavigationMesh = t.nav_region.navigation_mesh
 		print("Polígonos de navegación tras abrir la puerta: ", nm.get_polygon_count())
 		print("Ronda ", main.rounds.round_num, ", vivos ", main.rounds.alive)
+	if frame == 2710:
+		# zonas, piezas y Cañón de Zurraspa
+		var map: RID = t.nav_region.get_navigation_map()
+		var start: Vector3 = t.bar.to_global(Vector3(0.0, 0.0, 3.0))
+		check(t.zone_doors.size() == 3, "3 puertas de escombros entre zonas (%d)" % t.zone_doors.size())
+		var parts := get_nodes_in_group("parts")
+		check(parts.size() == 3, "3 piezas del cañón en el mapa (%d)" % parts.size())
+		for pt in parts:
+			var goal: Vector3 = pt.global_position
+			goal.y = 0.0
+			var path := NavigationServer3D.map_get_path(map, start, goal, true)
+			var end_d := 999.0 if path.is_empty() else Vector2(path[path.size() - 1].x, path[path.size() - 1].z).distance_to(Vector2(goal.x, goal.z))
+			check(end_d < 1.6, "se llega andando a la pieza '%s' (queda a %.1f m)" % [pt.part, end_d])
+		p.points = 100000
+		for d in t.zone_doors:
+			d.interact(p)
+			check(t.zone_open(d.zone), "abrir escombros abre la zona '%s'" % d.zone)
+		for pt in parts:
+			pt.interact(p)
+		check(main.parts.size() == 3, "recoger las 3 piezas")
+		var wbs := get_nodes_in_group("workbench")
+		check(wbs.size() == 1, "mesa de trabajo en la plaza")
+		if wbs.size() == 1:
+			wbs[0].interact(p)
+			log_lines = [wbs[0]]
+	if frame == 2710 + 150:
+		var wb = log_lines[0]
+		check(wb.built, "se monta el Cañón de Zurraspa")
+		wb.interact(p)
+		check(p.weapons.has("zurraspa"), "coger el Cañón de Zurraspa")
+		var Z = load("res://scripts/zombie.gd")
+		var z = Z.new()
+		z.player = p
+		z.manager = main.rounds
+		z.speed = 0.0
+		main.add_child(z)
+		main.rounds.alive += 1
+		var fwd: Vector3 = -p.global_transform.basis.z
+		fwd.y = 0.0
+		z.global_position = p.global_position + fwd.normalized() * 3.5
+		z.state = z.State.CHASE
+		log_lines = [z]
+	if frame == 2710 + 200:
+		var z = log_lines[0]
+		var target: Vector3 = z.global_position + Vector3(0, 1.0, 0)
+		var to: Vector3 = target - p.global_position
+		p.rotation.y = atan2(-to.x, -to.z)
+		p.head.rotation.x = atan2(target.y - (p.global_position.y + 1.65), Vector2(to.x, to.z).length())
+		p._equip(p.weapons.find("zurraspa"), false)
+	if frame == 2710 + 260:
+		p.fire_cd = 0.0
+		p.reloading = false
+		p.shoot()
+	if frame == 2710 + 360:
+		var z = log_lines[0]
+		check(z == null or not is_instance_valid(z) or z.dead, "el batido de chocolate mata al zombie")
 		print("RESULTADO: ", "OK" if ok else "FALLOS")
 		return true
 	return false

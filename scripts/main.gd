@@ -16,6 +16,7 @@ var hud: CanvasLayer
 var rounds: Node
 var flicker_t := 0.0
 var powerups := {}   # nombre -> segundos restantes
+var parts := {}      # piezas del Cañón de Zurraspa conseguidas
 
 
 func _ready() -> void:
@@ -27,6 +28,8 @@ func _ready() -> void:
 	town.name = "Town"
 	add_child(town)
 	town.build(TOWN_JSON)
+	for wb in get_tree().get_nodes_in_group("workbench"):
+		wb.game = self
 
 	hud = HudScript.new()
 	hud.name = "HUD"
@@ -68,6 +71,13 @@ func _process(delta: float) -> void:
 
 
 # ---------------------------------------------------------------- power-ups
+
+func collect_part(part: String) -> void:
+	parts[part] = true
+	var names := {"calzoncillo": "EL CALZONCILLO SUCIO", "tele": "LA TELE DE TUBO", "canon": "EL CAÑÓN"}
+	hud.announce("¡Has encontrado %s!" % names.get(part, part))
+	hud.set_parts(parts)
+
 
 func instakill_active() -> bool:
 	return powerups.has("insta_kill")

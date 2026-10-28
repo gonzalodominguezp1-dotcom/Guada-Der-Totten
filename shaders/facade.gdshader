@@ -145,16 +145,43 @@ void fragment() {
 		if (wstyle > 1.5 && wstyle < 2.5) {
 			col = hexstone(p, seed, mortar);
 		} else {
-			col = granite(p, seed, mortar);
+			col = granite(p * (wstyle > 0.5 && wstyle < 1.5 ? 0.7 : 1.0), seed, mortar);
+			if (wstyle > 0.5 && wstyle < 1.5) {
+				col *= vec3(1.18, 1.05, 0.80);    // laja de piedra cálida (L'Antica)
+				plinth_col = vec3(0.82, 0.80, 0.76);
+			}
 		}
-		plinth_h = 0.0;
+		plinth_h = wstyle > 0.5 && wstyle < 1.5 ? 0.9 : 0.0;
 	} else if (kind < 2.5) {
-		col = brick(p, seed, mortar);
-		plinth_h = wstyle > 0.5 ? 0.5 : 1.1;
+		if (wstyle > 2.5) {
+			// bloque de hormigón (polideportivo)
+			vec2 bp = p / vec2(0.4, 0.2);
+			bp.x += mod(floor(bp.y), 2.0) * 0.5;
+			vec2 bf = fract(bp);
+			mortar = 1.0 - rect(bf, vec2(0.02, 0.05), vec2(0.98, 0.95));
+			col = vec3(0.72, 0.71, 0.68) * (0.88 + 0.18 * hash12(floor(bp) + seed)) * (0.9 + 0.15 * n_fine);
+			col = mix(col, vec3(0.58, 0.57, 0.55), mortar);
+			plinth_h = 1.2;
+			plinth_col = vec3(0.86, 0.86, 0.84);
+		} else {
+			col = brick(p, seed, mortar);
+			plinth_h = wstyle > 0.5 ? 0.5 : 1.1;
+		}
 	} else {
-		float m3;
-		col = granite(p * vec2(0.6, 1.4), seed, m3);
-		col = mix(col, vec3(0.6, 0.57, 0.52) * (0.85 + 0.3 * n_fine), 0.35);
+		if (wstyle > 0.5 && wstyle < 1.5) {
+			// sillería de granito (Ayuntamiento)
+			vec2 bp = p / vec2(0.62, 0.36);
+			bp.x += mod(floor(bp.y), 2.0) * 0.5;
+			vec2 bf = fract(bp);
+			mortar = 1.0 - rect(bf, vec2(0.015, 0.03), vec2(0.985, 0.97));
+			float hb = hash12(floor(bp) + seed);
+			col = mix(vec3(0.70, 0.66, 0.58), vec3(0.80, 0.76, 0.68), hb) * (0.85 + 0.25 * texture(noise_tex, p * 4.0).r);
+			col = mix(col, vec3(0.55, 0.52, 0.47), mortar);
+		} else {
+			float m3;
+			col = granite(p * vec2(0.6, 1.4), seed, m3);
+			col = mix(col, vec3(0.6, 0.57, 0.52) * (0.85 + 0.3 * n_fine), 0.35);
+		}
 		plinth_h = 0.0;
 	}
 	float rough = 0.92;
@@ -205,8 +232,8 @@ void fragment() {
 			float fits = step((fl + 1.0) * floor_h, h + 0.2);
 			float r = hash12(vec2(idx + seed * 7.0, fl + seed * 3.0));
 			float pal = hash12(vec2(seed, 2.0));
-			bool modern = ((wstyle > 0.5 && wstyle < 1.5) || (wstyle > 1.5 && wstyle < 2.5 && fl > 0.5)) && kind != 1.0;
-			bool public_b = wstyle > 2.5;
+			bool modern = ((wstyle > 0.5 && wstyle < 1.5) || (wstyle > 1.5 && wstyle < 2.5 && fl > 0.5)) && kind != 1.0 && kind < 2.5;
+			bool public_b = wstyle > 2.5 && kind < 1.5;
 			bool shop = wstyle > 1.5 && wstyle < 2.5 && kind != 1.0 && fl < 0.5;
 			bool is_door = fl < 0.5 && r < 0.3 && !shop;
 			bool balcony = fl > 0.5 && r > (modern ? 0.75 : 0.55) && !public_b;
@@ -239,6 +266,7 @@ void fragment() {
 			}
 
 			vec3 frame_col = kind > 0.5 && kind < 1.5 ? vec3(0.68, 0.65, 0.58) : col * 1.1 + vec3(0.03);
+			if (kind > 2.5) frame_col = vec3(0.80, 0.77, 0.70);
 			if (kind > 1.5 && kind < 2.5) frame_col = vec3(0.70, 0.67, 0.60);
 			if (shop) frame_col = vec3(0.10, 0.25, 0.60);   // marcos azules de tienda
 			col = mix(col, frame_col, frame * (1.0 - hole));

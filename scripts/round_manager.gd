@@ -85,11 +85,13 @@ func _pick_spawn() -> Variant:
 			if pp.distance_to(s["pos"]) > 2.5:
 				window_spots.append(s)
 	var street_spots: Array = []
-	if town.exterior_open:
-		for s in town.spawn_points:
-			var d := pp.distance_to(s)
-			if d > 16.0 and d < 50.0:
-				street_spots.append({"pos": s, "barricade": null})
+	for i in town.spawn_points.size():
+		var s: Vector3 = town.spawn_points[i]
+		if not town.zone_open(town.spawn_zones[i]):
+			continue
+		var d := pp.distance_to(s)
+		if d > 16.0 and d < 50.0:
+			street_spots.append({"pos": s, "barricade": null})
 	var inside: bool = town.bar != null and town.bar.is_inside_interior(pp)
 	var use_window := not window_spots.is_empty() and (street_spots.is_empty() or (inside and randf() < 0.7))
 	if use_window:
@@ -98,8 +100,9 @@ func _pick_spawn() -> Variant:
 		return street_spots[randi() % street_spots.size()]
 	# sin bar (pueblo de prueba): cualquier punto razonable
 	var ok: Array = []
-	for s in town.spawn_points:
-		if pp.distance_to(s) > 12.0:
+	for i in town.spawn_points.size():
+		var s: Vector3 = town.spawn_points[i]
+		if town.zone_open(town.spawn_zones[i]) and pp.distance_to(s) > 12.0:
 			ok.append({"pos": s, "barricade": null})
 	if ok.is_empty():
 		return null

@@ -23,6 +23,17 @@ const DATA := {
 		"cost": 500, "hip": Vector3(0.16, -0.18, -0.36), "ads": Vector3(0.0, -0.055, -0.22),
 		"sight_y": 0.059, "muzzle": Vector3(0, 0.03, -0.70), "ads_fov": 62.0,
 	},
+	# Arma maravilla del mapa: se monta con 3 piezas en la mesa de trabajo
+	"zurraspa": {
+		"name": "Cañón de Zurraspa",
+		"damage": 1400.0, "pellets": 1, "mag": 20, "reserve": 140,
+		"fire_delay": 0.33, "reload": 2.8, "auto": false,
+		"spread_hip": 0.02, "spread_ads": 0.006, "range": 120.0, "falloff": 999.0,
+		"recoil": 1.3, "kick": 0.02, "sound": "zurraspa_shot", "pitch": 1.0, "volume": -1.0,
+		"cost": 0, "hip": Vector3(0.17, -0.19, -0.42), "ads": Vector3(0.0, -0.16, -0.36),
+		"sight_y": 0.16, "muzzle": Vector3(0, 0.07, -0.33), "ads_fov": 62.0,
+		"projectile": true, "splash": 2.8, "speed": 32.0,
+	},
 }
 
 
@@ -111,6 +122,41 @@ static func _mat(key: String) -> StandardMaterial3D:
 		"rubber":
 			m.albedo_color = Color(0.05, 0.05, 0.05)
 			m.roughness = 0.9
+		"zurraspa":
+			m.albedo_color = Color(0.24, 0.13, 0.05)
+			m.roughness = 0.25
+		"cotton":
+			m.albedo_color = Color(0.86, 0.84, 0.78)
+			m.roughness = 0.95
+			m.albedo_texture = nt
+			m.uv1_triplanar = true
+			m.uv1_scale = Vector3(40, 40, 40)
+		"elastic":
+			m.albedo_color = Color(0.25, 0.3, 0.55)
+			m.roughness = 0.8
+		"plastic":
+			m.albedo_color = Color(0.62, 0.58, 0.50)
+			m.roughness = 0.55
+		"plastic_dark":
+			m.albedo_color = Color(0.12, 0.11, 0.10)
+			m.roughness = 0.5
+		"crt":
+			m.albedo_color = Color(0.10, 0.14, 0.10)
+			m.roughness = 0.08
+			m.emission_enabled = true
+			m.emission = Color(0.45, 0.30, 0.10)
+			m.emission_energy_multiplier = 1.2
+		"copper":
+			m.albedo_color = Color(0.72, 0.40, 0.22)
+			m.metallic = 1.0
+			m.roughness = 0.3
+		"bulb":
+			m.albedo_color = Color(0.45, 0.25, 0.08, 0.75)
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.roughness = 0.05
+			m.emission_enabled = true
+			m.emission = Color(0.5, 0.28, 0.08)
+			m.emission_energy_multiplier = 0.8
 	_mats[key] = m
 	return m
 
@@ -202,6 +248,10 @@ static func build_model(id: String, with_hands := false) -> Node3D:
 			_shotgun(root)
 			if with_hands:
 				_shotgun_hands(root)
+		"zurraspa":
+			_zurraspa(root)
+			if with_hands:
+				_pistol_hands(root)
 	return root
 
 
@@ -327,3 +377,77 @@ static func _shotgun_hands(root: Node3D) -> void:
 		var z := -0.205 - i * 0.02
 		_finger(h, [Vector3(-0.026, -0.016, z), Vector3(-0.03, 0.006, z - 0.004), Vector3(-0.024, 0.022, z - 0.006)], 0.0082)
 	_finger(h, [Vector3(0.018, -0.02, -0.205), Vector3(0.026, 0.002, -0.235), Vector3(0.024, 0.016, -0.26)], 0.009)
+
+
+# ---------------------------------------------------------------- Cañón de Zurraspa
+
+## Piezas sueltas (también se usan en el mapa para recogerlas)
+static func part_model(id: String, s := 1.0) -> Node3D:
+	var root := Node3D.new()
+	root.name = id
+	match id:
+		"calzoncillo":
+			_box(root, Vector3(0.34, 0.05, 0.22) * s, Vector3(0, 0.1, 0) * s, "elastic")
+			_box(root, Vector3(0.3, 0.16, 0.04) * s, Vector3(0, 0.0, 0.09) * s, "cotton", Vector3(0.15, 0, 0))
+			_box(root, Vector3(0.3, 0.16, 0.04) * s, Vector3(0, 0.0, -0.09) * s, "cotton", Vector3(-0.15, 0, 0))
+			_box(root, Vector3(0.12, 0.06, 0.2) * s, Vector3(0, -0.09, 0) * s, "cotton")
+			for side in [-1.0, 1.0]:
+				_box(root, Vector3(0.04, 0.12, 0.2) * s, Vector3(0.15 * side, 0.02, 0) * s, "cotton", Vector3(0, 0, 0.3 * side))
+			_sphere(root, 0.06 * s, Vector3(0.01, -0.03, -0.112) * s, "zurraspa", Vector3(1.4, 1.1, 0.25))
+			_sphere(root, 0.035 * s, Vector3(-0.05, -0.08, -0.06) * s, "zurraspa", Vector3(1.0, 0.3, 1.4))
+		"tele":
+			_box(root, Vector3(0.44, 0.36, 0.2) * s, Vector3(0, 0, 0.0) * s, "plastic")
+			_box(root, Vector3(0.32, 0.26, 0.22) * s, Vector3(0, 0, 0.19) * s, "plastic")
+			_box(root, Vector3(0.18, 0.14, 0.1) * s, Vector3(0, 0, 0.33) * s, "plastic_dark")
+			_box(root, Vector3(0.36, 0.28, 0.01) * s, Vector3(-0.025, 0.01, -0.101) * s, "plastic_dark")
+			_sphere(root, 0.17 * s, Vector3(-0.025, 0.01, -0.095) * s, "crt", Vector3(1.0, 0.8, 0.12))
+			for k in 2:
+				_tube(root, 0.012 * s, 0.012 * s, Vector3(0.19, 0.06 - k * 0.06, -0.102) * s, "plastic_dark", 10)
+			for side in [-1.0, 1.0]:
+				_limb(root, Vector3(0.02 * side, 0.18, 0.08) * s, Vector3(0.14 * side, 0.42, 0.12) * s, 0.005 * s, "silver")
+			_sphere(root, 0.05 * s, Vector3(0.12, 0.17, 0.05) * s, "zurraspa", Vector3(1.4, 0.3, 1.2))
+		"canon":
+			_tube(root, 0.05 * s, 0.38 * s, Vector3.ZERO, "blued", 20)
+			for k in 3:
+				var t := MeshInstance3D.new()
+				var tm := TorusMesh.new()
+				tm.inner_radius = 0.05 * s
+				tm.outer_radius = 0.07 * s
+				t.mesh = tm
+				t.material_override = _mat("copper")
+				t.rotation.x = PI * 0.5
+				t.position = Vector3(0, 0, (-0.12 + k * 0.12) * s)
+				root.add_child(t)
+			_sphere(root, 0.055 * s, Vector3(0, 0.08, 0.06) * s, "bulb")
+			_tube(root, 0.06 * s, 0.03 * s, Vector3(0, 0, -0.205) * s, "copper", 16)
+			_sphere(root, 0.03 * s, Vector3(0.04, 0.03, -0.1) * s, "zurraspa", Vector3(1.0, 0.4, 1.6))
+	return root
+
+
+static func _zurraspa(root: Node3D) -> void:
+	# empuñadura envuelta en el calzoncillo
+	var gr := Node3D.new()
+	gr.position = Vector3(0, -0.012, 0.012)
+	gr.rotation.x = -0.21
+	root.add_child(gr)
+	_box(gr, Vector3(0.03, 0.11, 0.055), Vector3(0, -0.048, 0.0), "blued_dark")
+	var briefs := part_model("calzoncillo", 0.42)
+	briefs.position = Vector3(0, -0.05, 0.0)
+	briefs.rotation = Vector3(0, PI * 0.5, PI * 0.5)
+	gr.add_child(briefs)
+	# cuerpo: el cañón de bobinas
+	var body := part_model("canon", 0.62)
+	body.position = Vector3(0, 0.035, -0.08)
+	root.add_child(body)
+	_box(root, Vector3(0.03, 0.02, 0.12), Vector3(0, 0.0, -0.02), "blued_dark")
+	_box(root, Vector3(0.008, 0.03, 0.05), Vector3(0, -0.02, -0.04), "blued")
+	# la tele hace de boca del arma
+	var tv := part_model("tele", 0.42)
+	tv.position = Vector3(0, 0.07, -0.25)
+	root.add_child(tv)
+	_box(root, Vector3(0.006, 0.02, 0.006), Vector3(0, 0.152, -0.27), "silver")
+	_box(root, Vector3(0.006, 0.075, 0.006), Vector3(0, 0.115, 0.02), "blued_dark")
+	for x in [-0.009, 0.009]:
+		_box(root, Vector3(0.006, 0.012, 0.006), Vector3(x, 0.156, 0.02), "silver")
+	for p in [Vector3(0.02, 0.06, -0.12), Vector3(-0.025, 0.02, -0.05), Vector3(0.0, 0.13, -0.22), Vector3(0.018, -0.06, 0.02)]:
+		_sphere(root, 0.018, p, "zurraspa", Vector3(1.3, 0.5, 1.6))

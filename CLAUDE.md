@@ -5,11 +5,18 @@ Compatibilidad: el PC del usuario no aguanta Forward+). Todo el mundo se genera 
 arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en español neutro.
 
 - Mapa: `data/town.json`, generado desde `data/map.osm` con
-  `python3 tools/osm_to_json.py data/map.osm data/town.json --crop=-110,55,115,235 --start "Chiqui"`.
+  `python3 tools/osm_to_json.py data/map.osm data/town.json --crop=-175,60,262,235 --start "Chiqui"`.
 - Bar Chiqui (zona de inicio = todo el bar, 15x22 m como en OSM): `scripts/bar_chiqui.gd`,
   coordenadas locales (+Z = avenida). Ventanas W1-W6 en el perímetro; se descartan solas si
   dan contra otra casa. Única salida: la verja (BuyDoor estilo "gate").
-- Edificios a mano (bazar nº 2, Sala Groove nº 6) en `scripts/landmarks.gd`; su posición
+- Zonas (WaW): `scripts/zones.gd` cierra las calles jugables (`PLAYABLE`/`PLAYABLE_AREAS` del
+  conversor) con tapias y escombros; entre zonas hay BuyDoor estilo "debris" (avenida → lantica,
+  poli, plaza). Los spawns de calle solo se usan si su zona está abierta.
+- Edificios con interior en `scripts/interiors.gd` (`shell()` = caja hueca con huecos de puerta):
+  bazar chino (pieza "canon"), L'Antica (pieza "tele"), polideportivo (garita bajo las gradas,
+  pieza "calzoncillo"), Ayuntamiento + mesa de trabajo (grupo "workbench") y decoración de la
+  Plaza Consistorial. Arma maravilla "zurraspa" (proyectil `scripts/milkshake.gd`).
+- Edificios a mano sin interior (Sala Groove nº 6) en `scripts/landmarks.gd`; su posición
   aproximada está en `EXTRA_PREFABS` de `tools/osm_to_json.py`. Plazuelas (acera ensanchada)
   delante de Casa de la Juventud y Hogar del Mayor.
 - Fachadas: `shaders/facade.gdshader`, COLOR.a = tipo*64 + estilo*16 + semilla

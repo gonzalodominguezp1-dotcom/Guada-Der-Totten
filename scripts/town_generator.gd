@@ -14,6 +14,8 @@ const ROOF_SHADER = preload("res://shaders/roof_tiles.gdshader")
 const BarChiqui = preload("res://scripts/bar_chiqui.gd")
 
 const Landmarks = preload("res://scripts/landmarks.gd")
+const Zones = preload("res://scripts/zones.gd")
+const Interiors = preload("res://scripts/interiors.gd")
 const STUCCO_COLORS := [
 	Color(0.88, 0.84, 0.74), Color(0.92, 0.90, 0.85), Color(0.86, 0.76, 0.56),
 	Color(0.90, 0.80, 0.60), Color(0.82, 0.78, 0.70), Color(0.94, 0.92, 0.88),
@@ -40,6 +42,13 @@ var lamps: Array = []
 var nav_region: NavigationRegion3D
 var bar = null               # Bar Chiqui (si está en el mapa)
 var exterior_open := true    # sin bar, toda la calle está abierta
+var playable: Array = []     # calles jugables {zone, name, points, width}
+var areas: Array = []        # plazas jugables {zone, name, points}
+var zone_doors_data: Array = []
+var zone_doors: Array = []
+var open_zones := {}
+var spawn_zones: Array = []  # zona de cada punto de aparición
+var landmark_nodes := {}     # nombre del prefab -> nodo
 
 var noise_tex: NoiseTexture2D
 var soft_noise: NoiseTexture2D   # ruido de poco contraste para materiales estándar
@@ -89,7 +98,11 @@ func build(json_path: String) -> void:
 	_build_poles_and_wires()
 	_build_trees()
 	_build_boundary()
-	_compute_spawns()
+	Zones.build(self)
+	if playable.is_empty():
+		_compute_spawns()
+	else:
+		Zones.compute_spawns(self)
 	_choose_player_start()
 	_build_lamps()
 	_bake_navigation()
@@ -173,6 +186,13 @@ func _load_json(path: String) -> void:
 		_add_building(_pts(b["points"]), float(b.get("height", 7.0)), str(b.get("name", "")), str(b.get("type", "yes")))
 	for s in data.get("streets", []):
 		_add_street(_pts(s["points"]), float(s.get("width", 6.0)), str(s.get("name", "")), str(s.get("type", "residential")))
+	for p in data.get("playable", []):
+		playable.append({"zone": str(p["zone"]), "name": str(p["name"]), "points": _pts(p["points"]), "width": float(p["width"])})
+	for p in data.get("areas", []):
+		areas.append({"zone": str(p["zone"]), "name": str(p["name"]), "points": _pts(p["points"])})
+	for p in data.get("zone_doors", []):
+		zone_doors_data.append({"zone": str(p["zone"]), "cost": int(p["cost"]), "label": str(p["label"]),
+			"pos": Vector2(p["pos"][0], p["pos"][1]), "dir": Vector2(p["dir"][0], p["dir"][1]), "width": float(p["width"])})
 	for p in data.get("plazuelas", []):
 		plazuelas.append({"points": _pts(p["points"]), "name": str(p["name"]),
 			"dir": Vector2(p["dir"][0], p["dir"][1]), "normal": Vector2(p["normal"][0], p["normal"][1])})
@@ -785,7 +805,18 @@ func _build_prefabs() -> void:
 			nav_region.add_child(lm)
 			lm.position = Vector3(pf["pos"].x, 0.0, pf["pos"].y)
 			lm.rotation.y = pf["yaw"]
-			Landmarks.build(pf["prefab"], lm, self)
+			landmark_nodes[pf["prefab"]] = lm
+			match str(pf["prefab"]):
+				"bazar":
+					Interiors.bazar(lm, self)
+				"lantica":
+					Interiors.lantica(lm, self)
+				"polideportivo":
+					Interiors.polideportivo(lm, self)
+				"ayuntamiento":
+					Interiors.ayuntamiento(lm, self)
+				_:
+					Landmarks.build(pf["prefab"], lm, self)
 
 
 func _build_props() -> void:
@@ -794,6 +825,9 @@ func _build_props() -> void:
 			_build_fountain(p["pos"])
 	for pz in plazuelas:
 		Landmarks.plazuela(pz, self)
+	for a in areas:
+		if a["name"] == "Plaza Consistorial":
+			Interiors.plaza_decor(a, self)
 
 
 func _build_fountain(pos: Vector2) -> void:
@@ -1096,9 +1130,13 @@ func _compute_spawns() -> void:
 				var p := a.lerp(b, float(j) / steps)
 				if inner.has_point(p) and not _in_any_building(p, 0.9):
 					spawn_points.append(Vector3(p.x, 0.05, p.y))
+					spawn_zones.append("")
 	for p in pois:
 		if p["type"] == "fountain":
-			spawn_points = spawn_points.filter(func(sp): return Vector2(sp.x, sp.z).distance_to(p["pos"]) > 4.0)
+			for i in range(spawn_points.size() - 1, -1, -1):
+				if Vector2(spawn_points[i].x, spawn_points[i].z).distance_to(p["pos"]) < 4.0:
+					spawn_points.remove_at(i)
+					spawn_zones.remove_at(i)
 
 
 func _choose_player_start() -> void:
@@ -1285,4 +1323,16 @@ func _on_bake_finished() -> void:
 
 
 func open_exterior() -> void:
-	exterior_open = true
+	open_zone("avenida")
+
+
+func open_zone(z: String) -> void:
+	open_zones[z] = true
+	if z == "avenida":
+		exterior_open = true
+
+
+func zone_open(z: String) -> bool:
+	if playable.is_empty() or z == "":
+		return exterior_open
+	return open_zones.get(z, false)

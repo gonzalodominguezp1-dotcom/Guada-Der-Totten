@@ -44,7 +44,7 @@ modelo y animaciones de verdad.
 ## Cambiar el mapa
 
 ```
-python3 tools/osm_to_json.py map.osm data/town.json --crop=-110,55,115,235 --start "Chiqui"
+python3 tools/osm_to_json.py map.osm data/town.json --crop=-175,60,262,235 --start "Chiqui"
 ```
 
 `--crop` recorta la zona (metros desde el centro de la exportación), `--start` elige el inicio,
@@ -57,7 +57,10 @@ sustituye por el edificio hecho a mano.
 scripts/main.gd             ambiente, controles, power-ups
 scripts/town_generator.gd   calles, aceras, casas, tejados, postes, árboles, farolas, navegación
 scripts/bar_chiqui.gd       el Bar Chiqui (zona de inicio, a escala)
-scripts/landmarks.gd        bazar nº 2, Sala Groove nº 6 y plazuelas
+scripts/landmarks.gd        Sala Groove nº 6 y plazuelas
+scripts/interiors.gd        bazar chino, L'Antica, polideportivo, Ayuntamiento y plaza
+scripts/zones.gd            zonas del mapa: tapias, escombros y puertas entre zonas
+scripts/workbench.gd        mesa de trabajo del Cañón de Zurraspa (+ part_pickup.gd, milkshake.gd)
 scripts/player.gd           jugador, armas, cuchillo, compras, perks, Quick Revive
 scripts/weapons.gd          datos y modelos de las armas
 scripts/zombie.gd           zombie: ventanas, persecución, animación, Mixamo

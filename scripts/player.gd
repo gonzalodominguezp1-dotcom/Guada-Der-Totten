@@ -5,6 +5,7 @@ extends CharacterBody3D
 signal died
 
 const Weapons = preload("res://scripts/weapons.gd")
+const Milkshake = preload("res://scripts/milkshake.gd")
 
 const WALK_SPEED := 4.2
 const SPRINT_SPEED := 6.6
@@ -428,6 +429,12 @@ func shoot() -> void:
 	if ammo[id]["mag"] <= 2 and ammo[id]["mag"] > 0 and d["mag"] > 4:
 		Sfx.play("low_ammo", -14.0)
 
+	if d.get("projectile", false):
+		_fire_projectile(d)
+		_update_hud()
+		if ammo[id]["mag"] == 0 and ammo[id]["reserve"] > 0:
+			reload()
+		return
 	var spread: float = lerpf(d["spread_hip"], d["spread_ads"], aim)
 	var cb := camera.global_transform.basis
 	var space := get_world_3d().direct_space_state
@@ -464,6 +471,28 @@ func shoot() -> void:
 	_update_hud()
 	if ammo[id]["mag"] == 0 and ammo[id]["reserve"] > 0:
 		reload()
+
+
+func _fire_projectile(d: Dictionary) -> void:
+	var cb := camera.global_transform.basis
+	var spread: float = lerpf(d["spread_hip"], d["spread_ads"], aim)
+	var aim_dir := (-cb.z + cb.x * randf_range(-spread, spread) + cb.y * randf_range(-spread, spread)).normalized()
+	var from := camera.global_position
+	var q := PhysicsRayQueryParameters3D.create(from, from + aim_dir * 100.0, 1 | 4 | 16, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	var target: Vector3 = hit["position"] if not hit.is_empty() else from + aim_dir * 100.0
+	var muzzle_pos: Vector3 = viewmodel.to_global(d["muzzle"])
+	# si el objetivo está muy cerca, que salga desde la cámara para no atravesar paredes
+	if target.distance_to(from) < 1.2:
+		muzzle_pos = from
+	var shot = Milkshake.new()
+	shot.velocity = (target - muzzle_pos).normalized() * float(d["speed"])
+	shot.shooter = self
+	shot.damage = 999999.0 if (game != null and game.instakill_active()) else float(d["damage"])
+	shot.splash = float(d["splash"])
+	shot.exclude = [get_rid()]
+	get_tree().current_scene.add_child(shot)
+	shot.global_position = muzzle_pos
 
 
 func reload() -> void:

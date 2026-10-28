@@ -288,22 +288,76 @@ def main():
                               "height": round(b["height"] + 11.0, 2),
                               "name": "Torre de la iglesia", "type": "tower"})
 
+    fixed = []
     for ex in EXTRA_PREFABS:
+        if "front" in ex:
+            f = rel(ex["front"])
+            if crop[0] - ox <= f[0] <= crop[2] - ox and crop[1] - oz <= f[1] <= crop[3] - oz:
+                pf = {"prefab": ex["prefab"]}
+                set_fixed(pf, f, ex["fwd"])
+                fixed.append(pf)
+            continue
         a = rel(ex["anchor"])
         if crop[0] - ox <= a[0] <= crop[2] - ox and crop[1] - oz <= a[1] <= crop[3] - oz:
             prefabs.append({"prefab": ex["prefab"], "street": ex["street"],
                             "osm_points": [[a[0] - 1, a[1] - 1], [a[0] + 1, a[1] - 1], [a[0] + 1, a[1] + 1], [a[0] - 1, a[1] + 1]]})
     for pf in prefabs:
         place_prefab(pf, streets)
+    prefabs.extend(fixed)
+    for pf in prefabs:
         buildings[:] = [b for b in buildings
                         if not polys_overlap(b["points"], pf["footprint"])]
 
     plazuelas = make_plazuelas(buildings, streets)
 
+    # zonas jugables
+    playable = []
+    for pl in PLAYABLE:
+        for wid, tags, refs in ways:
+            if tags.get("name") != pl["street"] or tags.get("highway") not in HIGHWAY_WIDTHS:
+                continue
+            pts = [proj(*nodes[r]) for r in refs if r in nodes]
+            if len(pts) < 2:
+                continue
+            r = pl["rect"]
+            for part in clip_polyline(pts, (r[0], r[1], r[2], r[3])):
+                part = clip_polyline(part, (crop[0] - 5, crop[1] - 5, crop[2] + 5, crop[3] + 5))
+                for pp in part:
+                    playable.append({"zone": pl["zone"], "name": pl["street"],
+                                     "points": [rel(p) for p in pp], "width": HIGHWAY_WIDTHS[tags["highway"]]})
+    areas = []
+    for pz in plazuelas:
+        areas.append({"zone": "avenida", "name": pz["name"], "points": pz["points"]})
+    for a in PLAYABLE_AREAS:
+        areas.append({"zone": a["zone"], "name": a["name"], "points": [rel(p) for p in a["points"]]})
+    for pl in plazas:
+        if pl["name"] in SQUARE_ZONES:
+            areas.append({"zone": SQUARE_ZONES[pl["name"]], "name": pl["name"], "points": pl["points"]})
+    zone_doors = []
+    for zd in ZONE_DOORS:
+        for wid, tags, refs in ways:
+            if tags.get("name") != zd["street"]:
+                continue
+            pts = [proj(*nodes[r]) for r in refs if r in nodes]
+            for i in range(len(pts) - 1):
+                a_, b_ = pts[i], pts[i + 1]
+                k = zd["axis"]
+                lo, hi = sorted((a_[k], b_[k]))
+                if lo <= zd["value"] <= hi and hi > lo:
+                    t = (zd["value"] - a_[k]) / (b_[k] - a_[k])
+                    p = [a_[0] + (b_[0] - a_[0]) * t, a_[1] + (b_[1] - a_[1]) * t]
+                    L = math.dist(a_, b_)
+                    zone_doors.append({"zone": zd["zone"], "cost": zd["cost"], "label": zd["label"],
+                                       "pos": rel(p), "dir": [round((b_[0] - a_[0]) / L, 4), round((b_[1] - a_[1]) / L, 4)],
+                                       "width": HIGHWAY_WIDTHS.get(tags.get("highway"), 6.0)})
+                    break
+            if any(d["label"] == zd["label"] for d in zone_doors):
+                break
+
     real_count = len(buildings)
     if not args.no_fill:
         fill_houses(buildings, streets, plazas, pois, (crop[0] - ox, crop[1] - oz, crop[2] - ox, crop[3] - oz), rng,
-                    extra_obstacles=[pf["footprint"] for pf in prefabs] + [pz["points"] for pz in plazuelas])
+                    extra_obstacles=[pf["footprint"] for pf in prefabs] + [a["points"] for a in areas])
 
     start = None
     want = args.start.lower()
@@ -329,6 +383,9 @@ def main():
         "plazas": plazas,
         "prefabs": prefabs,
         "plazuelas": plazuelas,
+        "playable": playable,
+        "areas": areas,
+        "zone_doors": zone_doors,
         "pois": pois,
     }
     with open(args.dst, "w", encoding="utf-8") as f:
@@ -339,7 +396,8 @@ def main():
           + (f", inicio en {start['name']}" if start else "") + f"  ->  {args.dst}")
 
 
-PREFAB_SIZE = {"bar_chiqui": (15.0, 22.0), "bazar": (13.0, 11.0), "sala_groove": (13.0, 9.0)}  # ancho, fondo (m)
+PREFAB_SIZE = {"bar_chiqui": (15.0, 22.0), "bazar": (14.0, 11.0), "sala_groove": (13.0, 9.0),
+               "lantica": (16.0, 10.0), "polideportivo": (46.0, 30.0), "ayuntamiento": (16.0, 12.4)}  # ancho, fondo (m)
 
 # Edificios hechos a mano que no están en OSM: posición aproximada (x, z en
 # metros desde el centro de la exportación) y calle a la que dan.
@@ -347,7 +405,56 @@ PREFAB_SIZE = {"bar_chiqui": (15.0, 22.0), "bazar": (13.0, 11.0), "sala_groove":
 EXTRA_PREFABS = [
     {"prefab": "bazar", "anchor": [49.5, 118.0], "street": "Alejandro Rubio"},
     {"prefab": "sala_groove", "anchor": [28.0, 121.0], "street": "Alejandro Rubio"},
+    # L'Antica: al oeste del aparcamiento, en la acera sur de la avenida
+    {"prefab": "lantica", "anchor": [-136.0, 158.0], "street": "Alejandro Rubio"},
+    # Polideportivo: fachada norte (puertas amarillas) mirando a la plaza trasera
+    {"prefab": "polideportivo", "front": [-40.3, 191.2], "fwd": [-0.168, -0.986]},
+    # Ayuntamiento: sustituye al edificio de OSM, fachada a la Plaza Consistorial
+    {"prefab": "ayuntamiento", "front": [231.4, 129.7], "fwd": [-0.248, 0.969]},
 ]
+
+# Zonas jugables (coordenadas de la exportación). Todo lo demás queda fuera,
+# cerrado con tapias y escombros.
+PLAYABLE = [
+    {"zone": "avenida", "street": "Avenida Alejandro Rubio", "rect": [-95, -1e9, 61.5, 1e9]},
+    {"zone": "lantica", "street": "Avenida Alejandro Rubio", "rect": [-1e9, -1e9, -95, 1e9]},
+    {"zone": "poli", "street": "Calle Nogal", "rect": [-1e9, 132, 1e9, 172]},
+    {"zone": "plaza", "street": "Calle Pozo", "rect": [-1e9, -1e9, 1e9, 1e9]},
+    {"zone": "plaza", "street": "Plaza Libertad", "rect": [-1e9, -1e9, 1e9, 1e9]},
+    {"zone": "plaza", "street": "Calle Egido", "rect": [-1e9, -1e9, 1e9, 1e9]},
+]
+PLAYABLE_AREAS = [
+    {"zone": "poli", "name": "Plaza trasera",
+     "points": [[-60, 166], [-3, 162], [-3, 186.5], [-17, 187.5], [-61, 194.5]]},
+]
+SQUARE_ZONES = {"Plaza Consistorial": "plaza", "Plaza Libertad": "plaza"}
+# Puertas de zona (escombros que se compran): calle, eje y valor donde cortan
+ZONE_DOORS = [
+    {"zone": "lantica", "street": "Avenida Alejandro Rubio", "axis": 0, "value": -96.0, "cost": 1000,
+     "label": "despejar el paso hacia L'Antica"},
+    {"zone": "poli", "street": "Calle Nogal", "axis": 1, "value": 141.0, "cost": 1000,
+     "label": "despejar la Calle Nogal (polideportivo)"},
+    {"zone": "plaza", "street": "Calle Pozo", "axis": 0, "value": 73.0, "cost": 1250,
+     "label": "despejar la Calle Pozo (plaza del Ayuntamiento)"},
+]
+
+
+def set_fixed(pf, front, fwd):
+    """Prefab con posición y orientación fijas (frente y dirección hacia fuera)."""
+    w, d = PREFAB_SIZE[pf["prefab"]]
+    L = math.hypot(*fwd)
+    fwd = (fwd[0] / L, fwd[1] / L)
+    right = (-fwd[1], fwd[0])
+    pf["pos"] = [round(front[0], 2), round(front[1], 2)]
+    pf["yaw"] = round(math.atan2(fwd[0], fwd[1]), 4)
+    hw = w / 2 + 0.3
+    back = [front[0] - fwd[0] * (d + 0.3), front[1] - fwd[1] * (d + 0.3)]
+    pf["footprint"] = [
+        [round(front[0] + right[0] * hw, 2), round(front[1] + right[1] * hw, 2)],
+        [round(front[0] - right[0] * hw, 2), round(front[1] - right[1] * hw, 2)],
+        [round(back[0] - right[0] * hw, 2), round(back[1] - right[1] * hw, 2)],
+        [round(back[0] + right[0] * hw, 2), round(back[1] + right[1] * hw, 2)],
+    ]
 
 
 def place_prefab(pf, streets):

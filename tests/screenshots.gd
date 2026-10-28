@@ -1,7 +1,7 @@
 extends SceneTree
 ## Uso: xvfb-run godot --path . -s tests/screenshots.gd --fixed-fps 60 --resolution 1280x720
 ## Lee las cámaras de tests/screenshot_plan.json y guarda capturas en user://
-## Capturas: cada entrada = [marco, posición cámara, objetivo, espacio ("bar" o "world"), apuntar]
+## Cada entrada = [posición cámara, objetivo, espacio ("bar", "world" o nombre de un prefab), apuntar, arma opcional]
 var main
 var f := 0
 var plan := []
@@ -14,8 +14,13 @@ func _initialize():
 func cam(pos: Vector3, target: Vector3, space: String):
 	var b = main.town.bar
 	var p = main.player
-	var cp: Vector3 = b.to_global(pos) if space == "bar" else pos
-	var tg: Vector3 = b.to_global(target) if space == "bar" else target
+	var ref: Node3D = null
+	if space == "bar":
+		ref = b
+	elif main.town.landmark_nodes.has(space):
+		ref = main.town.landmark_nodes[space]
+	var cp: Vector3 = ref.to_global(pos) if ref else pos
+	var tg: Vector3 = ref.to_global(target) if ref else target
 	p.global_position = cp - Vector3(0, 1.65, 0)
 	var to: Vector3 = tg - cp
 	p.rotation.y = atan2(-to.x, -to.z)
@@ -34,6 +39,10 @@ func _process(_d):
 		var start := 20 + i * 45
 		if f >= start and f < start + 40:
 			cam(Vector3(e[0][0], e[0][1], e[0][2]), Vector3(e[1][0], e[1][1], e[1][2]), e[2])
+			if e.size() > 4 and f == start:
+				if not p.weapons.has(e[4]):
+					p.give_weapon(e[4])
+				p._equip(p.weapons.find(e[4]), false)
 			if e[3]:
 				Input.action_press("aim")
 			else:
