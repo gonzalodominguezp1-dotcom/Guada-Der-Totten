@@ -1,0 +1,16 @@
+ZOMBIES DE MIXAMO (opcional, pero es el mayor salto visual)
+
+1. Entra en https://www.mixamo.com con una cuenta de Adobe (gratis).
+2. En "Characters" elige un zombie (busca "zombie": p. ej. Warzombie, Copzombie, Zombiegirl...).
+3. En "Animations" descarga, una a una, estas animaciones con ese personaje:
+     walk   -> busca "Zombie Walk"     (marca "In Place")
+     run    -> busca "Zombie Running"  (marca "In Place")
+     attack -> busca "Zombie Attack"
+     death  -> busca "Zombie Death"
+     rise   -> busca "Zombie Stand Up" (opcional: salir del suelo)
+   Formato: FBX Binary (.fbx), Skin: "With Skin", 30 fps.
+4. Renombra los archivos exactamente así y ponlos en ESTA carpeta:
+     walk.fbx  run.fbx  attack.fbx  death.fbx  rise.fbx
+5. Abre Godot (importará los archivos) y pulsa F5.
+
+Si falta alguno, el juego usa los zombies hechos a mano para lo que no haya.
