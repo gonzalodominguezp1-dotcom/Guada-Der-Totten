@@ -6,7 +6,11 @@
 // UV  = (metros a lo largo de la pared, altura en metros)
 // UV2 = (longitud de la pared o 0 si no lleva ventanas, altura del edificio)
 // COLOR.rgb = color base del enlucido
-// COLOR.a   = (tipo * 64 + semilla) / 255
+// COLOR.a   = (tipo * 64 + estilo * 16 + semilla) / 255
+//   estilo 0: clásico (contraventanas, balcones de forja)
+//   estilo 1: moderno (aluminio y persianas enrollables)
+//   estilo 2: bajos comerciales (en granito: aplacado hexagonal)
+//   estilo 3: edificio público (ventanales con montantes)
 shader_type spatial;
 render_mode cull_disabled;
 
@@ -92,12 +96,33 @@ vec3 brick(vec2 p, float seed, out float mortar_out) {
 	return mix(b, vec3(0.72, 0.68, 0.60), mortar);
 }
 
+// Aplacado de piedra hexagonal (Hogar del Mayor)
+vec3 hexstone(vec2 p, float seed, out float mortar_out) {
+	vec2 sz = vec2(1.0, 1.7320508);
+	vec2 q = p / 0.2;
+	vec2 a = mod(q, sz) - sz * 0.5;
+	vec2 b = mod(q - sz * 0.5, sz) - sz * 0.5;
+	vec2 g = dot(a, a) < dot(b, b) ? a : b;
+	vec2 id = floor(q - g + 0.5);
+	vec2 ag = abs(g);
+	float d = max(dot(ag, vec2(0.5, 0.8660254)), ag.x);
+	float mortar = 1.0 - smoothstep(0.035, 0.07, 0.5 - d);
+	mortar_out = mortar;
+	float h = hash12(id + seed);
+	vec3 st = mix(vec3(0.70, 0.67, 0.60), vec3(0.80, 0.77, 0.70), h);
+	st = mix(st, vec3(0.62, 0.58, 0.50), step(0.85, h));
+	st *= 0.82 + 0.3 * texture(noise_tex, p * 5.0 + id).r;
+	st *= 0.85 + 0.2 * smoothstep(0.0, 0.25, 0.5 - d);
+	return mix(st, vec3(0.42, 0.40, 0.37), mortar);
+}
+
 void fragment() {
 	float len = dims.x;
 	float h = dims.y;
 	float code = floor(vcol.a * 255.0 + 0.5);
 	float kind = floor(code / 64.0);
-	float seed = mod(code, 64.0) + 1.0;
+	float wstyle = floor(mod(code, 64.0) / 16.0);
+	float seed = mod(code, 16.0) + 1.0;
 	vec3 wall_tint = vcol.rgb;
 	vec2 p = fuv;
 
@@ -108,18 +133,24 @@ void fragment() {
 	float mortar = 0.0;
 	vec3 col;
 	float plinth_h = 0.9;
+	vec3 plinth_col = vec3(-1.0);
 	if (kind < 0.5) {
 		col = wall_tint * (0.84 + 0.24 * n_big) * (0.94 + 0.12 * n_fine);
-		// desconchones que dejan ver el ladrillo o la piedra de debajo
 		float chip = smoothstep(0.79, 0.82, texture(noise_tex, p * 0.07 + vec2(seed * 0.5)).r);
 		float m2;
 		col = mix(col, granite(p, seed, m2) * 0.9, chip);
+		if (wstyle > 2.5) plinth_col = vec3(0.42, 0.17, 0.12);   // zócalo rojizo (edificio público)
+		if (wstyle > 1.5 && wstyle < 2.5) plinth_col = vec3(0.36, 0.18, 0.14);
 	} else if (kind < 1.5) {
-		col = granite(p, seed, mortar);
+		if (wstyle > 1.5 && wstyle < 2.5) {
+			col = hexstone(p, seed, mortar);
+		} else {
+			col = granite(p, seed, mortar);
+		}
 		plinth_h = 0.0;
 	} else if (kind < 2.5) {
 		col = brick(p, seed, mortar);
-		plinth_h = 1.1;
+		plinth_h = wstyle > 0.5 ? 0.5 : 1.1;
 	} else {
 		float m3;
 		col = granite(p * vec2(0.6, 1.4), seed, m3);
@@ -129,10 +160,18 @@ void fragment() {
 	float rough = 0.92;
 	vec3 emit = vec3(0.0);
 
-	// Zócalo de granito
+	// Zócalo
 	if (p.y < plinth_h) {
-		float m4;
-		col = granite(p + vec2(0.0, 3.0), seed + 5.0, m4) * 0.82;
+		if (plinth_col.r >= 0.0) {
+			// baldosa de zócalo
+			vec2 tq = fract(p / vec2(0.3, 0.2));
+			float tg = 1.0 - rect(tq, vec2(0.03), vec2(0.97));
+			col = mix(plinth_col * (0.8 + 0.35 * n_fine), vec3(0.25), tg * 0.6);
+			rough = 0.4;
+		} else {
+			float m4;
+			col = granite(p + vec2(0.0, 3.0), seed + 5.0, m4) * 0.82;
+		}
 	}
 
 	// Suciedad: abajo, chorreones desde la cornisa, manchas de humedad
@@ -145,7 +184,7 @@ void fragment() {
 	float cornice = step(h - 0.25, p.y);
 	col = mix(col, col * 0.6, cornice);
 
-	// Cables pegados a la fachada (muy típico): una línea oscura a 2.9 m
+	// Cables pegados a la fachada
 	if (kind < 2.5) {
 		float cable_y = 2.75 + 0.15 * sin(p.x * 0.25 + seed);
 		float cable = 1.0 - smoothstep(0.008, 0.02, abs(p.y - cable_y));
@@ -153,51 +192,83 @@ void fragment() {
 	}
 
 	// Ventanas, balcones y puertas
-	float nwin = floor(len / spacing);
+	float sp = wstyle > 2.5 ? 2.9 : (wstyle > 0.5 && wstyle < 1.5 ? 3.0 : spacing);
+	float nwin = floor(len / sp);
 	if (len > 0.5 && nwin >= 1.0) {
-		float off = (len - nwin * spacing) * 0.5;
+		float off = (len - nwin * sp) * 0.5;
 		float lx = p.x - off;
-		float idx = floor(lx / spacing);
+		float idx = floor(lx / sp);
 		if (idx >= 0.0 && idx < nwin) {
-			float cx = lx - (idx + 0.5) * spacing;
+			float cx = lx - (idx + 0.5) * sp;
 			float fl = floor(p.y / floor_h);
 			float fy = p.y - fl * floor_h;
 			float fits = step((fl + 1.0) * floor_h, h + 0.2);
 			float r = hash12(vec2(idx + seed * 7.0, fl + seed * 3.0));
-			float style = hash12(vec2(seed, 2.0));
-			bool is_door = fl < 0.5 && r < 0.3;
-			bool balcony = fl > 0.5 && r > 0.55;
-			vec2 mn = is_door ? vec2(-0.55, 0.0) : (balcony ? vec2(-0.5, 0.05) : vec2(-0.5, 0.95));
-			vec2 mx = is_door ? vec2(0.55, 2.25) : vec2(0.5, 2.3);
+			float pal = hash12(vec2(seed, 2.0));
+			bool modern = ((wstyle > 0.5 && wstyle < 1.5) || (wstyle > 1.5 && wstyle < 2.5 && fl > 0.5)) && kind != 1.0;
+			bool public_b = wstyle > 2.5;
+			bool shop = wstyle > 1.5 && wstyle < 2.5 && kind != 1.0 && fl < 0.5;
+			bool is_door = fl < 0.5 && r < 0.3 && !shop;
+			bool balcony = fl > 0.5 && r > (modern ? 0.75 : 0.55) && !public_b;
+			float hw = modern ? 0.65 : (public_b ? 1.2 : 0.5);
+			vec2 mn = is_door ? vec2(-0.55, 0.0) : (balcony ? vec2(-hw, 0.05) : vec2(-hw, 0.9));
+			vec2 mx = is_door ? vec2(0.55, 2.25) : vec2(hw, 2.3);
+			if (shop) {
+				mn = vec2(-sp * 0.5 + 0.3, 0.15);
+				mx = vec2(sp * 0.5 - 0.3, 2.55);
+			}
 			vec2 q = vec2(cx, fy);
 			float hole = rect(q, mn, mx) * fits;
-			float frame = rect(q, mn - vec2(0.1, is_door || balcony ? 0.0 : 0.1), mx + vec2(0.1, 0.12)) * fits;
+			float frame = rect(q, mn - vec2(0.1, is_door || balcony || shop ? 0.0 : 0.1), mx + vec2(0.1, 0.12)) * fits;
 
-			// Contraventanas verdes o persianas de madera (librillo)
-			bool shutters = !is_door && r > 0.25 && style > 0.35 && fits > 0.5;
+			// Contraventanas (solo estilo clásico)
+			bool shutters = !is_door && !modern && !public_b && !shop && wstyle < 0.5 && r > 0.25 && pal > 0.35 && fits > 0.5;
 			if (shutters) {
 				float sh = rect(q, vec2(mn.x - 0.55, mn.y), vec2(mn.x - 0.1, mx.y))
 						+ rect(q, vec2(mx.x + 0.1, mn.y), vec2(mx.x + 0.55, mx.y));
 				sh = clamp(sh, 0.0, 1.0);
-				vec3 sh_col = style > 0.7 ? vec3(0.12, 0.33, 0.18) : vec3(0.30, 0.18, 0.10);
+				vec3 sh_col = pal > 0.7 ? vec3(0.12, 0.33, 0.18) : vec3(0.30, 0.18, 0.10);
 				float slat = 0.86 + 0.14 * step(0.5, fract(fy * 7.0));
 				col = mix(col, sh_col * slat * (0.8 + 0.3 * n_fine), sh);
 				rough = mix(rough, 0.65, sh);
 			}
+			// Cajón de persiana enrollable (moderno)
+			if (modern && !is_door && fits > 0.5) {
+				float box = rect(q, vec2(mn.x - 0.06, mx.y + 0.02), vec2(mx.x + 0.06, mx.y + 0.24));
+				col = mix(col, vec3(0.78, 0.74, 0.66) * (0.9 + 0.1 * n_fine), box);
+			}
 
-			// Marco: granito en casas de piedra, liso en el resto
 			vec3 frame_col = kind > 0.5 && kind < 1.5 ? vec3(0.68, 0.65, 0.58) : col * 1.1 + vec3(0.03);
 			if (kind > 1.5 && kind < 2.5) frame_col = vec3(0.70, 0.67, 0.60);
+			if (shop) frame_col = vec3(0.10, 0.25, 0.60);   // marcos azules de tienda
 			col = mix(col, frame_col, frame * (1.0 - hole));
 
 			if (hole > 0.5) {
 				if (is_door) {
 					float plank = 0.8 + 0.2 * step(0.5, fract(cx * 4.0));
 					col = vec3(0.24, 0.14, 0.08) * plank * (0.7 + 0.5 * n_fine);
-					if (style > 0.6) col = vec3(0.10, 0.20, 0.13) * plank;  // puerta metálica verde
+					if (pal > 0.6) col = vec3(0.10, 0.20, 0.13) * plank;
+					if (modern) col = vec3(0.30, 0.30, 0.32) * plank;   // puerta de aluminio
 					rough = 0.7;
+				} else if (shop) {
+					// escaparate: cristal con carteles de colores y marco azul
+					col = vec3(0.03, 0.035, 0.04);
+					rough = 0.05;
+					vec2 pc = floor(vec2(cx / 0.45, fy / 0.6));
+					float ph = hash12(pc + seed * 5.0 + idx * 13.0);
+					if (ph > 0.55 && fy > 0.5 && fy < 2.1) {
+						vec3 poster = mix(vec3(0.9, 0.75, 0.2), vec3(0.2, 0.5, 0.85), hash12(pc + 3.0));
+						poster = mix(poster, vec3(0.85, 0.2, 0.2), step(0.7, hash12(pc + 7.0)));
+						col = poster * (0.7 + 0.3 * n_fine);
+						emit = poster * 0.15;
+						rough = 0.6;
+					}
+					float mull = step(abs(cx), 0.04) + step(abs(fy - 2.1), 0.04);
+					if (mull > 0.5) {
+						col = vec3(0.10, 0.25, 0.60);
+						emit = vec3(0.0);
+					}
 				} else {
-					// Cristal oscuro con carpintería de madera
 					col = vec3(0.015, 0.018, 0.022);
 					rough = 0.04;
 					if (r > 0.9 && fl < 1.5) {
@@ -205,32 +276,46 @@ void fragment() {
 						col = vec3(0.35, 0.2, 0.1);
 						rough = 0.3;
 					}
+					vec3 wood_col = vec3(0.28, 0.17, 0.10);
 					float wood = max(step(abs(cx), 0.03), step(abs(fy - (mn.y + (mx.y - mn.y) * 0.6)), 0.03));
+					if (modern) {
+						wood_col = vec3(0.33, 0.34, 0.36);   // aluminio
+						wood = step(abs(cx), 0.03);
+						// persiana enrollable a media altura
+						float blind_y = mix(mn.y + 0.2, mx.y, r);
+						if (fy > blind_y) {
+							col = vec3(0.74, 0.70, 0.62) * (0.9 + 0.1 * step(0.5, fract(fy * 22.0)));
+							emit = vec3(0.0);
+							rough = 0.7;
+						}
+					}
+					if (public_b) {
+						wood_col = vec3(0.85, 0.85, 0.82);
+						wood = step(abs(fract(cx / 0.6) - 0.5), 0.025) + step(abs(fy - 1.75), 0.025);
+					}
 					wood = max(wood, 1.0 - rect(q, mn + vec2(0.05), mx - vec2(0.05)));
 					if (wood > 0.5) {
-						col = vec3(0.28, 0.17, 0.10) * (0.8 + 0.3 * n_fine);
+						col = wood_col * (0.8 + 0.3 * n_fine);
 						rough = 0.6;
 						emit = vec3(0.0);
 					}
-					// Rejas en planta baja
-					if (fl < 0.5) {
+					if (fl < 0.5 && (!modern || kind > 1.5)) {
 						float bar = step(abs(fract(cx / 0.13) - 0.5), 0.1) + step(abs(fract((fy - 0.95) / 0.45) - 0.5), 0.05);
 						if (bar > 0.5) {
-							col = vec3(0.04);
+							col = public_b ? vec3(0.35, 0.12, 0.08) : vec3(0.04);
 							rough = 0.5;
 							emit = vec3(0.0);
 						}
 					}
 				}
 			}
-			// Balcón de forja: losa y barandilla
 			if (balcony && fits > 0.5) {
 				float slab = rect(q, vec2(mn.x - 0.25, -0.08), vec2(mx.x + 0.25, 0.06));
 				col = mix(col, vec3(0.45, 0.42, 0.38), slab);
 				float rail_zone = rect(q, vec2(mn.x - 0.2, 0.06), vec2(mx.x + 0.2, 1.05));
 				float bars = step(abs(fract(cx / 0.11) - 0.5), 0.09);
 				float rails = step(abs(fy - 1.02), 0.025) + step(abs(fy - 0.12), 0.02);
-				float curl = step(abs(length(vec2(fract(cx / 0.22) - 0.5, (fy - 0.85) / 0.22 * 0.5)) - 0.25), 0.04) * step(0.75, fy);
+				float curl = modern ? 0.0 : step(abs(length(vec2(fract(cx / 0.22) - 0.5, (fy - 0.85) / 0.22 * 0.5)) - 0.25), 0.04) * step(0.75, fy);
 				float iron = rail_zone * clamp(bars + rails + curl, 0.0, 1.0);
 				col = mix(col, vec3(0.03), iron);
 				rough = mix(rough, 0.45, iron);

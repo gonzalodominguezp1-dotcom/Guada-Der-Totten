@@ -53,6 +53,9 @@ var sway := Vector2.ZERO
 var decals: Array = []
 var hole_tex: GradientTexture2D
 var interact_target = null
+var flash: MeshInstance3D
+var flash_t := 0.0
+var slide: Node3D
 var heartbeat_cd := 0.0
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
@@ -197,6 +200,8 @@ func _equip(idx: int, animate := true) -> void:
 		viewmodel.queue_free()
 	viewmodel = Weapons.build_model(weapon_id(), true)
 	weapon_holder.add_child(viewmodel)
+	slide = viewmodel.get_node_or_null("slide")
+	_build_flash()
 	_set_layers(viewmodel)
 	weapon_holder.position = wdata()["hip"]
 	if animate:
@@ -206,6 +211,42 @@ func _equip(idx: int, animate := true) -> void:
 		tw.tween_property(self, "lower_anim", 0.0, 0.35)
 		tw.tween_callback(func(): switching = false)
 	_update_hud()
+
+
+func _build_flash() -> void:
+	# fogonazo: dos planos cruzados con brillo aditivo en la boca del cañón
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(1.0, 0.65, 0.25, 0.9)
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 0.85, 1))
+	g.set_color(1, Color(1, 0.4, 0.05, 0))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(0.5, 0.0)
+	m.albedo_texture = gt
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	flash = MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(0.09, 0.09)
+	flash.mesh = qm
+	flash.material_override = m
+	flash.position = wdata()["muzzle"] + Vector3(0, 0, -0.02)
+	flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	viewmodel.add_child(flash)
+	var side := MeshInstance3D.new()
+	var sq := QuadMesh.new()
+	sq.size = Vector2(0.05, 0.14)
+	side.mesh = sq
+	side.material_override = m
+	side.rotation = Vector3(PI * 0.5, 0, 0)
+	side.position = Vector3(0, 0, -0.05)
+	flash.add_child(side)
+	flash.visible = false
 
 
 func _set_layers(n: Node) -> void:
@@ -284,7 +325,9 @@ func _process(delta: float) -> void:
 			Sfx.play("heartbeat", -4.0)
 	var want_aim := 1.0 if (Input.is_action_pressed("aim") and not busy() and not reloading and not switching) else 0.0
 	aim = move_toward(aim, want_aim, delta * 6.0)
-	camera.fov = lerpf(75.0, 57.0, aim)
+	camera.fov = lerpf(75.0, wdata()["ads_fov"], aim)
+	if hud:
+		hud.set_crosshair_visible(aim < 0.3 and not dead)
 	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	if not dead and not downed and captured:
 		if not busy() and not switching:
@@ -350,6 +393,9 @@ func _animate_gun(delta: float) -> void:
 		knife_model.position = Vector3(0.25 - t * 0.35, -0.22 + sin(t * PI) * 0.1, -0.3 - sin(t * PI) * 0.25)
 		knife_model.rotation = Vector3(0, 0.6 - t * 1.4, -0.4)
 	muzzle.light_energy = move_toward(muzzle.light_energy, 0.0, delta * 120.0)
+	flash_t -= delta
+	if flash:
+		flash.visible = flash_t > 0.0
 
 
 # ---------------------------------------------------------------- disparo
@@ -368,6 +414,15 @@ func shoot() -> void:
 	fire_cd = d["fire_delay"]
 	recoil = 1.0
 	muzzle.light_energy = 6.0
+	flash_t = 0.045
+	if flash:
+		flash.rotation.z = randf() * TAU
+		var fs := randf_range(0.8, 1.25) * (1.6 if id == "escopeta" else 1.0)
+		flash.scale = Vector3(fs, fs, fs)
+	if slide:
+		var tw := create_tween()
+		tw.tween_property(slide, "position:z", 0.03, 0.03)
+		tw.tween_property(slide, "position:z", 0.0, 0.07)
 	head.rotation.x = clampf(head.rotation.x + d["kick"], deg_to_rad(-89), deg_to_rad(89))
 	Sfx.play(d["sound"], d["volume"], d["pitch"] * randf_range(0.96, 1.04))
 	if ammo[id]["mag"] <= 2 and ammo[id]["mag"] > 0 and d["mag"] > 4:

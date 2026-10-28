@@ -21,15 +21,18 @@ Abre Godot → Importar → `project.godot` → Importar y editar → **F5**.
 
 ## Cómo funciona la partida
 
-- Empiezas en el comedor del Bar Chiqui con la pistola (8/80) y 500 puntos.
-- Los zombies salen en las terrazas y en el pasillo lateral, arrancan las tablas de las
-  **3 ventanas** y entran. Mantén F en una ventana para volver a clavar tablas (+10 puntos).
+- Empiezas en el comedor del Bar Chiqui (Av. Alejandro Rubio 14) con la pistola (8/80) y 500 puntos.
+- La primera zona es **todo el bar**, a la escala del edificio de OpenStreetMap (15 × 22 m):
+  terraza delantera, comedor con barra, terraza trasera con la charanga y el pasillo lateral
+  que une las dos terrazas.
+- Los zombies llegan desde la calle y arrancan las tablas de las **6 ventanas del perímetro**.
+  Mantén F en una ventana para volver a clavar tablas (+10 puntos).
 - Dentro del bar:
   - **Quick Revive** (500): si caes, te levantas sola a los 9 s (hasta 3 compras).
   - **Escopeta de caza** en la pared (500; munición 250).
-- **Puerta del bar** (750) → terraza delantera y Avenida Alejandro Rubio.
-- **Puerta de la terraza trasera** (1000) → instrumentos de la charanga y pasillo.
-- Al abrir una puerta, los zombies también salen por las calles.
+- **Verja del bar** (750) → Avenida Alejandro Rubio. Al abrirla, los zombies también salen por las calles.
+- En la avenida: el bazar del nº 2 (esquina con Calle Caño), la Sala Groove (nº 6), y la
+  Casa de la Juventud y el Hogar del Mayor con su plazuela, bancos y bolardos.
 - Puntos: 10 por impacto, 60 por baja, 100 a la cabeza, 130 con cuchillo.
 - Power-ups (verdes): Munición máxima, Muerte instantánea, Puntos x2 y Nuke.
 
@@ -53,7 +56,8 @@ sustituye por el edificio hecho a mano.
 ```
 scripts/main.gd             ambiente, controles, power-ups
 scripts/town_generator.gd   calles, aceras, casas, tejados, postes, árboles, farolas, navegación
-scripts/bar_chiqui.gd       el Bar Chiqui (interior según el plano)
+scripts/bar_chiqui.gd       el Bar Chiqui (zona de inicio, a escala)
+scripts/landmarks.gd        bazar nº 2, Sala Groove nº 6 y plazuelas
 scripts/player.gd           jugador, armas, cuchillo, compras, perks, Quick Revive
 scripts/weapons.gd          datos y modelos de las armas
 scripts/zombie.gd           zombie: ventanas, persecución, animación, Mixamo
@@ -69,4 +73,5 @@ shaders/                    fachadas (enlucido, granito, ladrillo), tejas, acera
 tools/osm_to_json.py        OpenStreetMap → data/town.json
 tools/make_sounds.py        genera los sonidos (sintetizados, sin audio de ningún juego)
 tests/smoke_test.gd         prueba automática
+tests/screenshots.gd        capturas desde cámaras definidas en tests/screenshot_plan.json
 ```

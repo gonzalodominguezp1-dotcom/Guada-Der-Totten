@@ -13,9 +13,11 @@ const PAVER_SHADER = preload("res://shaders/pavers.gdshader")
 const ROOF_SHADER = preload("res://shaders/roof_tiles.gdshader")
 const BarChiqui = preload("res://scripts/bar_chiqui.gd")
 
+const Landmarks = preload("res://scripts/landmarks.gd")
 const STUCCO_COLORS := [
 	Color(0.88, 0.84, 0.74), Color(0.92, 0.90, 0.85), Color(0.86, 0.76, 0.56),
 	Color(0.90, 0.80, 0.60), Color(0.82, 0.78, 0.70), Color(0.94, 0.92, 0.88),
+	Color(0.88, 0.77, 0.50), Color(0.85, 0.72, 0.47),
 ]
 const NO_FURNITURE := ["track", "path", "footway", "steps"]
 const MAX_LAMPS := 46
@@ -26,6 +28,7 @@ enum Kind { STUCCO, GRANITE, BRICK, PLAIN_STONE }
 var buildings: Array = []   # {points, height, name, type, rect}
 var streets: Array = []     # {points, width, name, type}
 var plazas: Array = []      # {points, name}
+var plazuelas: Array = []   # acera ensanchada delante de edificios públicos
 var prefabs: Array = []
 var pois: Array = []
 var bounds := Rect2()
@@ -42,6 +45,7 @@ var noise_tex: NoiseTexture2D
 var soft_noise: NoiseTexture2D   # ruido de poco contraste para materiales estándar
 var facade_mat: ShaderMaterial
 var roof_mat: ShaderMaterial
+var dark_roof_mat: ShaderMaterial
 var flat_roof_mat: StandardMaterial3D
 var cobble_mat: ShaderMaterial
 var asphalt_mat: ShaderMaterial
@@ -118,6 +122,8 @@ func _make_materials() -> void:
 
 	facade_mat = _shader_mat(FACADE_SHADER)
 	roof_mat = _shader_mat(ROOF_SHADER)
+	dark_roof_mat = _shader_mat(ROOF_SHADER)
+	dark_roof_mat.set_shader_parameter("tint", Color(0.55, 0.38, 0.33))
 	cobble_mat = _shader_mat(COBBLE_SHADER)
 	asphalt_mat = _shader_mat(ASPHALT_SHADER)
 	paver_mat = _shader_mat(PAVER_SHADER)
@@ -167,6 +173,9 @@ func _load_json(path: String) -> void:
 		_add_building(_pts(b["points"]), float(b.get("height", 7.0)), str(b.get("name", "")), str(b.get("type", "yes")))
 	for s in data.get("streets", []):
 		_add_street(_pts(s["points"]), float(s.get("width", 6.0)), str(s.get("name", "")), str(s.get("type", "residential")))
+	for p in data.get("plazuelas", []):
+		plazuelas.append({"points": _pts(p["points"]), "name": str(p["name"]),
+			"dir": Vector2(p["dir"][0], p["dir"][1]), "normal": Vector2(p["normal"][0], p["normal"][1])})
 	for p in data.get("plazas", []):
 		plazas.append({"points": _pts(p["points"]), "name": str(p.get("name", ""))})
 	for p in data.get("prefabs", []):
@@ -510,18 +519,47 @@ func _in_any_building(p: Vector2, pad: float) -> bool:
 	return false
 
 
-func _kind_for(b: Dictionary, idx: int) -> int:
+## Devuelve [tipo de fachada, estilo de ventanas]
+func _kind_for(b: Dictionary, idx: int) -> Array:
 	var t: String = b["type"]
 	var n: String = b["name"].to_lower()
 	if t in ["church", "cathedral", "tower"] or n.contains("iglesia") or n.contains("torre"):
-		return Kind.PLAIN_STONE
+		return [Kind.PLAIN_STONE, 0]
+	if n.contains("juventud"):
+		return [Kind.STUCCO, 3]
+	if n.contains("hogar del mayor"):
+		return [Kind.GRANITE, 2]
 	var c: Vector2 = b["rect"].get_center()
 	var r := fmod(float(idx) * 0.618034, 1.0)
-	if c.distance_to(_stone_spot) < 45.0:
-		return Kind.GRANITE if r < 0.5 else (Kind.BRICK if r < 0.72 else Kind.STUCCO)
+	var r2 := fmod(float(idx) * 0.414214, 1.0)
+	if c.distance_to(_stone_spot) < 40.0:
+		return [Kind.GRANITE, 0] if r < 0.5 else ([Kind.BRICK, 0] if r < 0.72 else [Kind.STUCCO, 0])
 	if b["name"] != "":
-		return Kind.STUCCO
-	return Kind.GRANITE if r < 0.25 else (Kind.BRICK if r < 0.4 else Kind.STUCCO)
+		return [Kind.STUCCO, 3 if r2 < 0.5 else 1]
+	if _near_avenue(c):
+		# Av. Alejandro Rubio: bloques de ladrillo modernos, casas de enlucido
+		# amarillo y alguna de piedra
+		if r < 0.32:
+			return [Kind.BRICK, 1]
+		if r < 0.78:
+			return [Kind.STUCCO, 1 if r2 < 0.4 else 0]
+		return [Kind.GRANITE, 0]
+	if r < 0.22:
+		return [Kind.GRANITE, 0]
+	if r < 0.38:
+		return [Kind.BRICK, 1 if r2 < 0.5 else 0]
+	return [Kind.STUCCO, 1 if r2 < 0.25 else 0]
+
+
+func _near_avenue(c: Vector2) -> bool:
+	for s in streets:
+		if not s["name"].contains("Alejandro Rubio"):
+			continue
+		var pts: PackedVector2Array = s["points"]
+		for i in pts.size() - 1:
+			if c.distance_to(Geometry2D.get_closest_point_to_segment(c, pts[i], pts[i + 1])) < 16.0:
+				return true
+	return false
 
 
 func _build_buildings() -> void:
@@ -533,11 +571,21 @@ func _build_buildings() -> void:
 		idx += 1
 		var pts: PackedVector2Array = b["points"]
 		var h: float = b["height"]
-		var kind := _kind_for(b, idx)
+		var ks := _kind_for(b, idx)
+		var kind: int = ks[0]
+		var style: int = ks[1]
+		var lname: String = b["name"].to_lower()
+		if lname.contains("juventud"):
+			h = 7.4
+		elif lname.contains("hogar del mayor"):
+			h = 4.6
 		var col: Color = STUCCO_COLORS[(idx * 7919) % STUCCO_COLORS.size()]
-		col.a = float(kind * 64 + (idx * 37) % 63) / 255.0
+		if style == 3:
+			col = Color(0.90, 0.78, 0.46)
+		col.a = float(kind * 64 + style * 16 + (idx * 7) % 16) / 255.0
 		var windows := kind != Kind.PLAIN_STONE
-		var quad := pts.size() == 4 and h < 14.0
+		var named_roof := lname.contains("juventud") or lname.contains("hogar del mayor")
+		var quad := (pts.size() == 4 and h < 14.0) or named_roof
 		var wall_top := h if quad else h + 0.7  # pretil en azoteas
 
 		var walls := SurfaceTool.new()
@@ -575,7 +623,9 @@ func _build_buildings() -> void:
 		body.add_child(cs)
 
 		if quad:
-			_hip_roof(body, pts, h, b["type"] == "tower")
+			_hip_roof(body, pts, h, b["type"] == "tower", dark_roof_mat if lname.contains("juventud") else null)
+			if named_roof:
+				_public_sign(body, b)
 		else:
 			var roof := SurfaceTool.new()
 			roof.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -590,7 +640,7 @@ func _build_buildings() -> void:
 				_mesh_node(body, roof.commit(), flat_roof_mat)
 
 
-func _hip_roof(parent: Node3D, pts: PackedVector2Array, h: float, steep: bool) -> void:
+func _hip_roof(parent: Node3D, pts: PackedVector2Array, h: float, steep: bool, mat: Material = null) -> void:
 	# Ajusta un rectángulo orientado al edificio y le pone un tejado a cuatro aguas
 	var u := (pts[1] - pts[0]).normalized()
 	var v := Vector2(-u.y, u.x)
@@ -631,9 +681,9 @@ func _hip_roof(parent: Node3D, pts: PackedVector2Array, h: float, steep: bool) -
 	_roof_face(st, [C, D, R1, R2])
 	_roof_face(st, [D, A, R1])
 	_roof_face(st, [B, C, R2])
-	_mesh_node(parent, st.commit(), roof_mat)
+	_mesh_node(parent, st.commit(), mat if mat else roof_mat)
 	# Chimenea
-	if rng.randf() < 0.35 and not steep:
+	if rng.randf() < 0.35 and not steep and mat == null:
 		var cp := c + u * rng.randf_range(-r, r) * 0.8 + v * W * 0.18
 		var ch := MeshInstance3D.new()
 		var bm := BoxMesh.new()
@@ -642,6 +692,59 @@ func _hip_roof(parent: Node3D, pts: PackedVector2Array, h: float, steep: bool) -
 		ch.material_override = curb_mat
 		ch.position = Vector3(cp.x, h + (rise + 1.2) * 0.5, cp.y)
 		parent.add_child(ch)
+
+
+## Cartel en la fachada que da a la calle (Casa de la Juventud, Hogar del Mayor)
+func _public_sign(body: Node3D, b: Dictionary) -> void:
+	var pts: PackedVector2Array = b["points"]
+	var lname: String = b["name"].to_lower()
+	var best_i := 0
+	var best_d := INF
+	for i in pts.size():
+		var mid := (pts[i] + pts[(i + 1) % pts.size()]) * 0.5
+		var d := _dist_to_street(mid, null)
+		var L := pts[i].distance_to(pts[(i + 1) % pts.size()])
+		if L > 4.0 and d < best_d:
+			best_d = d
+			best_i = i
+	var a := pts[best_i]
+	var c := pts[(best_i + 1) % pts.size()]
+	var e := c - a
+	var n := Vector2(e.y, -e.x).normalized()
+	if Geometry2D.is_point_in_polygon((a + c) * 0.5 + n * 0.1, pts):
+		n = -n
+	var mid := (a + c) * 0.5 + n * 0.08
+	var yaw := atan2(n.x, n.y)
+	var board := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	var text := ""
+	var y := 3.3
+	var board_mat: StandardMaterial3D
+	var text_col := Color.WHITE
+	if lname.contains("juventud"):
+		bm.size = Vector3(2.6, 0.9, 0.05)
+		board_mat = _std(Color(0.92, 0.92, 0.9), 0.6)
+		text = "ESCUELA MUNICIPAL DE\nMÚSICA Y DANZA\n— CASA DE LA JUVENTUD —"
+		text_col = Color(0.65, 0.08, 0.06)
+	else:
+		bm.size = Vector3(3.6, 0.55, 0.08)
+		board_mat = _std(Color(0.30, 0.17, 0.09), 0.7)
+		text = "HOGAR DEL MAYOR"
+		text_col = Color(0.85, 0.72, 0.5)
+		y = 2.75
+	board.mesh = bm
+	board.material_override = board_mat
+	board.position = Vector3(mid.x, y, mid.y)
+	board.rotation.y = yaw
+	body.add_child(board)
+	var l := Label3D.new()
+	l.text = text
+	l.font_size = 48
+	l.pixel_size = 0.005
+	l.modulate = text_col
+	l.outline_size = 0
+	l.position = Vector3(0, 0, 0.05)
+	board.add_child(l)
 
 
 func _v3(p: Vector2, y: float) -> Vector3:
@@ -676,12 +779,21 @@ func _build_prefabs() -> void:
 			bar.rotation.y = pf["yaw"]
 			bar.build(self)
 			exterior_open = false
+		else:
+			var lm := Node3D.new()
+			lm.name = pf["prefab"]
+			nav_region.add_child(lm)
+			lm.position = Vector3(pf["pos"].x, 0.0, pf["pos"].y)
+			lm.rotation.y = pf["yaw"]
+			Landmarks.build(pf["prefab"], lm, self)
 
 
 func _build_props() -> void:
 	for p in pois:
 		if p["type"] == "fountain":
 			_build_fountain(p["pos"])
+	for pz in plazuelas:
+		Landmarks.plazuela(pz, self)
 
 
 func _build_fountain(pos: Vector2) -> void:
@@ -747,8 +859,17 @@ func _sidewalk_points(spacing: float, offset_extra: float, side_mode: String, st
 	return out
 
 
+func _in_plazuela(p: Vector2) -> bool:
+	for pz in plazuelas:
+		if Geometry2D.is_point_in_polygon(p, pz["points"]):
+			return true
+	return false
+
+
 func _spot_free(p: Vector2, pad: float, s = null) -> bool:
 	if not bounds.grow(-2.0).has_point(p):
+		return false
+	if _in_plazuela(p):
 		return false
 	if _in_any_building(p, pad):
 		return false

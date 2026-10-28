@@ -4,6 +4,7 @@ shader_type spatial;
 render_mode cull_disabled;
 
 uniform sampler2D noise_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
+uniform vec3 tint : source_color = vec3(1.0);
 
 float hash12(vec2 p) {
 	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -32,6 +33,6 @@ void fragment() {
 	float moss = smoothstep(0.6, 0.8, texture(noise_tex, p * 0.4 + 7.0).r);
 	c = mix(c, vec3(0.22, 0.24, 0.16), moss * 0.6);
 	c *= 0.75 + 0.4 * n;
-	ALBEDO = c * shade;
+	ALBEDO = c * shade * tint;
 	ROUGHNESS = 0.8;
 }

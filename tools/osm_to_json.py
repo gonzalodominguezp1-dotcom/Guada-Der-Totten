@@ -288,15 +288,22 @@ def main():
                               "height": round(b["height"] + 11.0, 2),
                               "name": "Torre de la iglesia", "type": "tower"})
 
+    for ex in EXTRA_PREFABS:
+        a = rel(ex["anchor"])
+        if crop[0] - ox <= a[0] <= crop[2] - ox and crop[1] - oz <= a[1] <= crop[3] - oz:
+            prefabs.append({"prefab": ex["prefab"], "street": ex["street"],
+                            "osm_points": [[a[0] - 1, a[1] - 1], [a[0] + 1, a[1] - 1], [a[0] + 1, a[1] + 1], [a[0] - 1, a[1] + 1]]})
     for pf in prefabs:
         place_prefab(pf, streets)
         buildings[:] = [b for b in buildings
                         if not polys_overlap(b["points"], pf["footprint"])]
 
+    plazuelas = make_plazuelas(buildings, streets)
+
     real_count = len(buildings)
     if not args.no_fill:
         fill_houses(buildings, streets, plazas, pois, (crop[0] - ox, crop[1] - oz, crop[2] - ox, crop[3] - oz), rng,
-                    extra_obstacles=[pf["footprint"] for pf in prefabs])
+                    extra_obstacles=[pf["footprint"] for pf in prefabs] + [pz["points"] for pz in plazuelas])
 
     start = None
     want = args.start.lower()
@@ -321,6 +328,7 @@ def main():
         "streets": streets,
         "plazas": plazas,
         "prefabs": prefabs,
+        "plazuelas": plazuelas,
         "pois": pois,
     }
     with open(args.dst, "w", encoding="utf-8") as f:
@@ -331,7 +339,15 @@ def main():
           + (f", inicio en {start['name']}" if start else "") + f"  ->  {args.dst}")
 
 
-PREFAB_SIZE = {"bar_chiqui": (12.0, 16.0)}  # ancho, fondo (m)
+PREFAB_SIZE = {"bar_chiqui": (15.0, 22.0), "bazar": (13.0, 11.0), "sala_groove": (13.0, 9.0)}  # ancho, fondo (m)
+
+# Edificios hechos a mano que no están en OSM: posición aproximada (x, z en
+# metros desde el centro de la exportación) y calle a la que dan.
+# Av. Alejandro Rubio 2 (bazar, esquina con Calle Caño) y 6 (Sala Groove).
+EXTRA_PREFABS = [
+    {"prefab": "bazar", "anchor": [49.5, 118.0], "street": "Alejandro Rubio"},
+    {"prefab": "sala_groove", "anchor": [28.0, 121.0], "street": "Alejandro Rubio"},
+]
 
 
 def place_prefab(pf, streets):
@@ -341,6 +357,8 @@ def place_prefab(pf, streets):
     best = None
     for s in streets:
         if s["type"] in NO_FILL_TYPES:
+            continue
+        if pf.get("street") and pf["street"] not in s["name"]:
             continue
         for i in range(len(s["points"]) - 1):
             a, b = s["points"][i], s["points"][i + 1]
@@ -377,6 +395,47 @@ def place_prefab(pf, streets):
         [round(back[0] + right[0] * hw, 2), round(back[1] + right[1] * hw, 2)],
     ]
     del pf["osm_points"]
+    pf.pop("street", None)
+
+
+PLAZUELA_NAMES = ("juventud", "hogar del mayor")
+
+
+def make_plazuelas(buildings, streets):
+    """Zona entre la fachada y la acera (Casa de la Juventud, Hogar del Mayor):
+    la acera se mete hacia dentro y hay bancos. Aquí no se ponen casas."""
+    out = []
+    for b in buildings:
+        if not any(n in b["name"].lower() for n in PLAZUELA_NAMES):
+            continue
+        c = centroid(b["points"])
+        best = None
+        for st in streets:
+            if st["type"] in NO_FILL_TYPES:
+                continue
+            for i in range(len(st["points"]) - 1):
+                a, q = st["points"][i], st["points"][i + 1]
+                d = pt_seg_dist(c, a, q)
+                if best is None or d < best[0]:
+                    best = (d, a, q, st["width"])
+        if best is None:
+            continue
+        _, a, q, w = best
+        L = math.dist(a, q)
+        dx, dz = (q[0] - a[0]) / L, (q[1] - a[1]) / L
+        nx, nz = -dz, dx
+        if (c[0] - a[0]) * nx + (c[1] - a[1]) * nz < 0:
+            nx, nz = -nx, -nz
+        along = [(p[0] - a[0]) * dx + (p[1] - a[1]) * dz for p in b["points"]]
+        across = [(p[0] - a[0]) * nx + (p[1] - a[1]) * nz for p in b["points"]]
+        t0, t1 = min(along) - 1.0, max(along) + 1.0
+        s0, s1 = w / 2 + 0.3, min(across) - 0.2
+        if s1 - s0 < 2.0:
+            continue
+        P = lambda t, s_: [round(a[0] + dx * t + nx * s_, 2), round(a[1] + dz * t + nz * s_, 2)]
+        out.append({"name": b["name"], "points": [P(t0, s0), P(t1, s0), P(t1, s1), P(t0, s1)],
+                    "dir": [round(dx, 4), round(dz, 4)], "normal": [round(nx, 4), round(nz, 4)]})
+    return out
 
 
 def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=()):

@@ -57,9 +57,26 @@ func _process(_delta: float) -> bool:
 		p.health = 1e9
 		check(t.bar != null, "Bar Chiqui construido")
 		if t.bar:
-			check(t.bar.barricades.size() == 3, "3 ventanas con barricada")
+			print("Ventanas con barricada: ", t.bar.window_defs.keys(), "  puntos de aparición: ", t.bar.window_spawners.size())
+			check(t.bar.barricades.size() >= 3, "al menos 3 ventanas con barricada")
 			check(t.bar.is_inside_interior(p.global_position), "el jugador empieza dentro del bar")
 			check(not t.exterior_open, "la calle empieza cerrada")
+	if frame == 240:
+		var map: RID = t.nav_region.get_navigation_map()
+		var a: Vector3 = t.bar.to_global(Vector3(5.0, 0, -6.0))
+		var b: Vector3 = t.bar.to_global(Vector3(5.0, 0, -20.0))
+		var path := NavigationServer3D.map_get_path(map, a, b, true)
+		var plen := 0.0
+		for i in range(1, path.size()):
+			plen += path[i - 1].distance_to(path[i])
+		check(path.size() > 0 and path[path.size() - 1].distance_to(b) < 0.8 and plen < 20.0,
+			"el pasillo lateral une la terraza delantera con la trasera (%.1f m)" % plen)
+		var reach := 0
+		for sp in t.bar.window_spawners:
+			var pth := NavigationServer3D.map_get_path(map, sp["pos"], sp["barricade"].outside_point(), true)
+			if pth.size() > 0 and pth[pth.size() - 1].distance_to(sp["barricade"].outside_point()) < 0.8:
+				reach += 1
+		check(reach == t.bar.window_spawners.size(), "todos los zombies de ventana llegan a su ventana (%d/%d)" % [reach, t.bar.window_spawners.size()])
 	if frame == 600:  # 10 s
 		var zs := get_nodes_in_group("zombies")
 		check(zs.size() > 0, "han aparecido zombies (%d)" % zs.size())

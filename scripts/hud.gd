@@ -182,6 +182,11 @@ func set_health(frac: float) -> void:
 	damage_mat.set_shader_parameter("amount", clampf((1.0 - frac) * 1.6, 0.0, 1.0))
 
 
+func set_crosshair_visible(v: bool) -> void:
+	if crosshair.visible != v:
+		crosshair.visible = v
+
+
 func set_prompt(t: String) -> void:
 	if prompt_label.text != t:
 		prompt_label.text = t

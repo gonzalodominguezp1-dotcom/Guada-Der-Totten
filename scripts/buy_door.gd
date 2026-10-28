@@ -38,7 +38,11 @@ func _ready() -> void:
 	brass.albedo_color = Color(0.8, 0.62, 0.25)
 	brass.metallic = 1.0
 	brass.roughness = 0.3
-	var n_leaves := 2 if style == "double_glass" else 1
+	var white := StandardMaterial3D.new()
+	white.albedo_color = Color(0.85, 0.85, 0.82)
+	white.roughness = 0.45
+	white.metallic = 0.3
+	var n_leaves := 2 if style in ["double_glass", "gate"] else 1
 	var lw := size.x / n_leaves
 	for i in n_leaves:
 		var hinge := Node3D.new()
@@ -49,6 +53,18 @@ func _ready() -> void:
 		var leaf := Node3D.new()
 		leaf.position = Vector3(dir * lw * 0.5, 0, 0)
 		hinge.add_child(leaf)
+		if style == "gate":
+			# verja de forja blanca con marco rojo
+			_part(leaf, Vector3(lw - 0.02, 0.06, 0.06), Vector3(0, size.y * 0.5 - 0.04, 0), red)
+			_part(leaf, Vector3(lw - 0.02, 0.06, 0.06), Vector3(0, -size.y * 0.5 + 0.04, 0), red)
+			_part(leaf, Vector3(lw - 0.02, 0.04, 0.04), Vector3(0, 0.0, 0), white)
+			_part(leaf, Vector3(0.06, size.y, 0.06), Vector3(-dir * (lw * 0.5 - 0.03), 0, 0), red)
+			_part(leaf, Vector3(0.06, size.y, 0.06), Vector3(dir * (lw * 0.5 - 0.03), 0, 0), red)
+			var nb := int(lw / 0.11)
+			for k in nb:
+				_part(leaf, Vector3(0.022, size.y - 0.1, 0.022), Vector3(-lw * 0.5 + 0.08 + k * (lw - 0.16) / maxf(nb - 1, 1), 0, 0), white)
+			leaves.append([hinge, dir])
+			continue
 		_part(leaf, Vector3(lw - 0.02, size.y - 0.02, size.z), Vector3.ZERO, red if style == "double_glass" else wood)
 		if style == "double_glass":
 			_part(leaf, Vector3(lw - 0.2, size.y * 0.55, size.z + 0.01), Vector3(0, 0.25, 0), glass)
