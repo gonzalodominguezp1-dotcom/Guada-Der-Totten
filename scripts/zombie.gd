@@ -64,6 +64,14 @@ var head_tilt := 0.0
 var stuck_t := 0.0
 var last_pos := Vector3.ZERO
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
+# Cañón de Zurraspa: resbalón (estilo Die Rise) y "sentirse sucio"
+var slip_t := 0.0
+var slip_total := 0.0
+var slip_immune := 0.0
+var slip_vel := Vector3.ZERO
+var fall := 0.0               # 0 = de pie, 1 = en el suelo
+var dirty_t := 0.0
+var stink: CPUParticles3D
 
 
 func _ready() -> void:
@@ -454,8 +462,23 @@ func _physics_process(delta: float) -> void:
 
 	attack_cd -= delta
 	tear_cd -= delta
+	slip_immune -= delta
+	if dirty_t > 0.0:
+		dirty_t -= delta
+		if dirty_t <= 0.0 and stink:
+			stink.emitting = false
+	if slip_t > 0.0:
+		# resbalando: sin IA, se desliza con la inercia que llevaba
+		slip_t -= delta
+		slip_vel = slip_vel.move_toward(Vector3.ZERO, delta * 3.0)
+		velocity.x = slip_vel.x
+		velocity.z = slip_vel.z
+		move_and_slide()
+		if slip_t <= 0.0:
+			slip_immune = 1.2   # tiempo para levantarse antes de volver a caer
+		return
 	var move_dir := Vector3.ZERO
-	var spd := speed
+	var spd := speed * (0.6 if dirty_t > 0.0 else 1.0)
 	var to_player: Vector3 = player.global_position - global_position
 	to_player.y = 0.0
 	var dist := to_player.length()
@@ -584,6 +607,10 @@ func _face(dir: Vector3, delta: float) -> void:
 func _process(delta: float) -> void:
 	if dead or visual == null:
 		return
+	var want_fall := 1.0 if slip_t > 0.35 else 0.0
+	fall = move_toward(fall, want_fall, delta * (4.0 if want_fall > fall else 1.6))
+	visual.rotation.x = -1.35 * fall
+	visual.position.y = 0.18 * fall if fall > 0.0 else visual.position.y
 	moan_cd -= delta
 	if moan_cd <= 0.0:
 		moan_cd = randf_range(3.0, 8.0)
@@ -659,6 +686,78 @@ func take_hit(dmg: float, pos: Vector3, attacker, melee := false) -> void:
 			tw.tween_property(spine, "rotation:x", spine.rotation.x + 0.3, 0.05)
 
 
+## Daño continuo (charcos, avalancha): solo da puntos si mata.
+func take_damage(amount: float, attacker = null) -> void:
+	if dead:
+		return
+	health -= amount
+	if health <= 0.0:
+		if attacker:
+			attacker.add_points(60)
+			attacker.hit_feedback(true)
+		_die(false)
+
+
+## Resbalón al pisar zurraspa: cae de culo y se desliza un poco.
+func apply_slip(duration: float) -> void:
+	if dead or slip_t > 0.0 or slip_immune > 0.0:
+		return
+	if state == State.RISING or state == State.CLIMBING:
+		return
+	slip_t = duration
+	slip_total = duration
+	var v := Vector3(velocity.x, 0, velocity.z)
+	if v.length() < 0.3:
+		v = -global_transform.basis.z * 0.5
+	slip_vel = v.normalized() * clampf(v.length() * 2.5, 1.5, 4.0)
+	Sfx.play3d("splat", global_position, -6.0, randf_range(1.1, 1.4))
+
+
+## "Se siente sucio": va más lento y suelta una nube de peste.
+func apply_dirty(duration: float) -> void:
+	if dead:
+		return
+	dirty_t = maxf(dirty_t, duration)
+	if stink == null:
+		stink = CPUParticles3D.new()
+		stink.amount = 14
+		stink.lifetime = 1.4
+		stink.local_coords = false
+		stink.direction = Vector3.UP
+		stink.spread = 25.0
+		stink.initial_velocity_min = 0.2
+		stink.initial_velocity_max = 0.5
+		stink.gravity = Vector3(0, 0.2, 0)
+		stink.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		stink.emission_sphere_radius = 0.35
+		stink.scale_amount_min = 0.6
+		stink.scale_amount_max = 1.6
+		var m := SphereMesh.new()
+		m.radius = 0.07
+		m.height = 0.14
+		m.radial_segments = 6
+		m.rings = 3
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.45, 0.5, 0.15, 0.35)
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.material = mat
+		stink.mesh = m
+		stink.position.y = 1.2
+		add_child(stink)
+	stink.emitting = true
+
+
+## Defecación Nuclear del cañón mejorado.
+func nuclear_kill(attacker = null) -> void:
+	if dead:
+		return
+	health = 0.0
+	if attacker:
+		attacker.add_points(60)
+	_die(false)
+
+
 func _blood(pos: Vector3, amount: int) -> void:
 	var p := CPUParticles3D.new()
 	p.amount = amount
@@ -689,6 +788,8 @@ func _blood(pos: Vector3, amount: int) -> void:
 
 func _die(headshot: bool) -> void:
 	dead = true
+	if stink:
+		stink.emitting = false
 	collision_layer = 0
 	collision_mask = 1
 	col_shape.disabled = state == State.CLIMBING

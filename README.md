@@ -14,6 +14,7 @@ Abre Godot → Importar → `project.godot` → Importar y editar → **F5**.
 | Disparar / apuntar | Clic izquierdo / Clic derecho |
 | Recargar | R |
 | Cuchillo | V (o rueda del ratón pulsada) |
+| Defecación Nuclear (Cañón de Zurraspa Dorado) | G |
 | Usar / comprar / reparar | F (mantener para reparar ventanas) |
 | Cambiar de arma | 1 / 2 / rueda del ratón |
 | Soltar el ratón | Esc |
@@ -60,7 +61,9 @@ scripts/bar_chiqui.gd       el Bar Chiqui (zona de inicio, a escala)
 scripts/landmarks.gd        Sala Groove nº 6 y plazuelas
 scripts/interiors.gd        bazar chino, L'Antica, polideportivo, Ayuntamiento y plaza
 scripts/zones.gd            zonas del mapa: tapias, escombros y puertas entre zonas
-scripts/workbench.gd        mesa de trabajo del Cañón de Zurraspa (+ part_pickup.gd, milkshake.gd)
+scripts/workbench.gd        mesa de trabajo del Cañón de Zurraspa (+ part_pickup.gd)
+scripts/zurraspa_*.gd       charcos y avalancha del Cañón de Zurraspa
+scripts/pack_a_punch.gd     máquina de mejora (provisional en la plaza)
 scripts/player.gd           jugador, armas, cuchillo, compras, perks, Quick Revive
 scripts/weapons.gd          datos y modelos de las armas
 scripts/zombie.gd           zombie: ventanas, persecución, animación, Mixamo

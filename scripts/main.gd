@@ -128,6 +128,7 @@ func _setup_input() -> void:
 	_add_key("reload", KEY_R)
 	_add_key("interact", KEY_F)
 	_add_key("melee", KEY_V)
+	_add_key("zurraspa_special", KEY_G)
 	_add_key("weapon_1", KEY_1)
 	_add_key("weapon_2", KEY_2)
 	_add_mouse("shoot", MOUSE_BUTTON_LEFT)

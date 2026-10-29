@@ -36,6 +36,29 @@ func _path_len(t) -> float:
 	return L
 
 
+func _test_zombie(p, dist: float, side: float):
+	var Z = load("res://scripts/zombie.gd")
+	var z = Z.new()
+	z.player = p
+	z.manager = main.rounds
+	z.speed = 0.0
+	main.add_child(z)
+	main.rounds.alive += 1
+	var fwd: Vector3 = -p.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	z.global_position = p.global_position + fwd * dist + fwd.cross(Vector3.UP) * side
+	z.state = z.State.CHASE
+	return z
+
+
+func _aim_at(p, z) -> void:
+	var target: Vector3 = z.global_position + Vector3(0, 1.0, 0)
+	var to: Vector3 = target - p.global_position
+	p.rotation.y = atan2(-to.x, -to.z)
+	p.head.rotation.x = atan2(target.y - (p.global_position.y + 1.65), Vector2(to.x, to.z).length())
+
+
 func find_interactable(script_name: String):
 	for it in get_nodes_in_group("interactables"):
 		if it.get_script().resource_path.ends_with(script_name):
@@ -204,32 +227,63 @@ func _process(_delta: float) -> bool:
 		check(wb.built, "se monta el Cañón de Zurraspa")
 		wb.interact(p)
 		check(p.weapons.has("zurraspa"), "coger el Cañón de Zurraspa")
-		var Z = load("res://scripts/zombie.gd")
-		var z = Z.new()
-		z.player = p
-		z.manager = main.rounds
-		z.speed = 0.0
-		main.add_child(z)
-		main.rounds.alive += 1
-		var fwd: Vector3 = -p.global_transform.basis.z
-		fwd.y = 0.0
-		z.global_position = p.global_position + fwd.normalized() * 3.5
-		z.state = z.State.CHASE
-		log_lines = [z]
+		log_lines = [_test_zombie(p, 3.5, 0.0)]
 	if frame == 2710 + 200:
-		var z = log_lines[0]
-		var target: Vector3 = z.global_position + Vector3(0, 1.0, 0)
-		var to: Vector3 = target - p.global_position
-		p.rotation.y = atan2(-to.x, -to.z)
-		p.head.rotation.x = atan2(target.y - (p.global_position.y + 1.65), Vector2(to.x, to.z).length())
+		_aim_at(p, log_lines[0])
 		p._equip(p.weapons.find("zurraspa"), false)
-	if frame == 2710 + 260:
+		log_lines.append(get_nodes_in_group("zombies").size())
+	if frame >= 2710 + 260 and frame < 2710 + 290:
+		# ráfaga de medio segundo
 		p.fire_cd = 0.0
-		p.reloading = false
 		p.shoot()
-	if frame == 2710 + 360:
+	if frame == 2710 + 262:
 		var z = log_lines[0]
-		check(z == null or not is_instance_valid(z) or z.dead, "el batido de chocolate mata al zombie")
+		check(is_instance_valid(z) and (z.slip_t > 0.0 or z.dead), "la zurraspa hace resbalar al zombie")
+	if frame == 2710 + 330:
+		var z = log_lines[0]
+		check(not is_instance_valid(z) or z.dead, "la ráfaga de zurraspa mata al zombie")
+		var puddles := 0
+		for n in main.get_children():
+			if n.get_script() and n.get_script().resource_path.ends_with("zurraspa_puddle.gd"):
+				puddles += 1
+		check(puddles > 0, "la zurraspa deja charcos (%d)" % puddles)
+		# Pack-a-Punch
+		var paps := get_nodes_in_group("pack_a_punch")
+		check(paps.size() == 1, "hay máquina Pack-a-Punch")
+		p.points = 10000
+		paps[0].interact(p)
+		check(not p.weapons.has("zurraspa"), "el cañón entra en el Pack-a-Punch")
+		log_lines = [paps[0]]
+	if frame == 2710 + 560:
+		var pap = log_lines[0]
+		pap.interact(p)
+		check(p.weapons.has("zurraspa_pap"), "sale el Cañón de Zurraspa Dorado")
+		p._equip(p.weapons.find("zurraspa_pap"), false)
+		log_lines = [_test_zombie(p, 3.0, -0.8), _test_zombie(p, 5.0, 0.8), _test_zombie(p, 7.0, 0.0)]
+		for z in log_lines:
+			z.health = 2000.0
+	if frame == 2710 + 600:
+		_aim_at(p, log_lines[2])
+		p.fire_cd = 0.0
+		p.shoot()
+	if frame == 2710 + 680:
+		var dead := 0
+		for z in log_lines:
+			if not is_instance_valid(z) or z.dead:
+				dead += 1
+		check(dead == 3, "la avalancha atraviesa y mata a toda la fila (%d/3)" % dead)
+		log_lines = [_test_zombie(p, 6.0, 3.0), _test_zombie(p, 9.0, -4.0)]
+		for z in log_lines:
+			z.health = 1e6
+	if frame == 2710 + 700:
+		check(p.nuclear_discharge(), "Defecación Nuclear")
+		check(not p.nuclear_discharge(), "la Defecación Nuclear tiene que recargar")
+	if frame == 2710 + 720:
+		var alive := 0
+		for z in get_nodes_in_group("zombies"):
+			if not z.dead:
+				alive += 1
+		check(alive == 0, "la Defecación Nuclear mata a todos (vivos: %d)" % alive)
 		print("RESULTADO: ", "OK" if ok else "FALLOS")
 		return true
 	return false

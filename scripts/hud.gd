@@ -247,8 +247,8 @@ func announce(t: String) -> void:
 	tw.tween_property(announce_label, "modulate:a", 0.0, 1.0)
 
 
-func flash() -> void:
-	flash_rect.color = Color(1, 1, 1, 0.9)
+func flash(c := Color.WHITE) -> void:
+	flash_rect.color = Color(c.r, c.g, c.b, 0.9)
 	var tw := create_tween()
 	tw.tween_property(flash_rect, "color:a", 0.0, 1.2)
 

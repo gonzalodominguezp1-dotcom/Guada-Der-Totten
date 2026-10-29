@@ -5,7 +5,8 @@ extends CharacterBody3D
 signal died
 
 const Weapons = preload("res://scripts/weapons.gd")
-const Milkshake = preload("res://scripts/milkshake.gd")
+const Puddle = preload("res://scripts/zurraspa_puddle.gd")
+const Avalanche = preload("res://scripts/zurraspa_wave.gd")
 
 const WALK_SPEED := 4.2
 const SPRINT_SPEED := 6.6
@@ -58,6 +59,8 @@ var flash: MeshInstance3D
 var flash_t := 0.0
 var slide: Node3D
 var heartbeat_cd := 0.0
+var puddle_cd := 0.0
+var nuclear_cd := 0.0          # Defecación Nuclear (cañón dorado)
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
 
@@ -179,6 +182,8 @@ func refill_all_ammo() -> void:
 	for id in weapons:
 		var d := Weapons.data(id)
 		ammo[id]["reserve"] = d["reserve"]
+		if d["reserve"] == 0:   # arma de un solo cargador: se rellena el cargador
+			ammo[id]["mag"] = d["mag"]
 	_update_hud()
 
 
@@ -194,6 +199,20 @@ func give_weapon(id: String) -> void:
 		_equip(current)
 
 
+## Quita un arma del inventario (p. ej. al meterla en el Pack-a-Punch).
+func take_weapon(id: String) -> void:
+	var i := weapons.find(id)
+	if i < 0:
+		return
+	weapons.remove_at(i)
+	ammo.erase(id)
+	if weapons.is_empty():
+		weapons.append("pistola")
+		var d := Weapons.data("pistola")
+		ammo["pistola"] = {"mag": d["mag"], "reserve": d["reserve"]}
+	_equip(0)
+
+
 func _equip(idx: int, animate := true) -> void:
 	current = idx
 	reloading = false
@@ -202,7 +221,9 @@ func _equip(idx: int, animate := true) -> void:
 	viewmodel = Weapons.build_model(weapon_id(), true)
 	weapon_holder.add_child(viewmodel)
 	slide = viewmodel.get_node_or_null("slide")
-	_build_flash()
+	flash = null
+	if not wdata().has("spray") and not wdata().has("wave"):
+		_build_flash()
 	_set_layers(viewmodel)
 	weapon_holder.position = wdata()["hip"]
 	if animate:
@@ -262,7 +283,10 @@ func _update_hud() -> void:
 		return
 	var a: Dictionary = ammo[weapon_id()]
 	hud.set_ammo(a["mag"], a["reserve"], reloading)
-	hud.set_weapon(wdata()["name"])
+	var n: String = wdata()["name"]
+	if wdata().has("nuclear_cooldown"):
+		n += "\n[G] Defecación Nuclear: " + ("LISTA" if nuclear_cd <= 0.0 else "%d s" % ceili(nuclear_cd))
+	hud.set_weapon(n)
 
 
 func busy() -> bool:
@@ -312,6 +336,14 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	fire_cd -= delta
 	knife_cd -= delta
+	puddle_cd -= delta
+	if nuclear_cd > 0.0:
+		var prev := ceili(nuclear_cd)
+		nuclear_cd -= delta
+		if ceili(nuclear_cd) != prev:
+			_update_hud()
+		if nuclear_cd <= 0.0 and hud and has_weapon("zurraspa_pap"):
+			hud.announce("Defecación Nuclear lista [G]")
 	since_hit += delta
 	if downed:
 		_process_downed(delta)
@@ -339,6 +371,8 @@ func _process(delta: float) -> void:
 				reload()
 			if Input.is_action_just_pressed("melee"):
 				knife()
+			if Input.is_action_just_pressed("zurraspa_special"):
+				nuclear_discharge()
 			if Input.is_action_just_pressed("weapon_1") and current != 0:
 				_equip(0)
 			if Input.is_action_just_pressed("weapon_2") and weapons.size() > 1 and current != 1:
@@ -429,8 +463,12 @@ func shoot() -> void:
 	if ammo[id]["mag"] <= 2 and ammo[id]["mag"] > 0 and d["mag"] > 4:
 		Sfx.play("low_ammo", -14.0)
 
-	if d.get("projectile", false):
-		_fire_projectile(d)
+	if d.has("spray") or d.has("wave"):
+		if d.has("spray"):
+			_fire_spray(d)
+		else:
+			_fire_wave(d)
+		_crt_flash()
 		_update_hud()
 		if ammo[id]["mag"] == 0 and ammo[id]["reserve"] > 0:
 			reload()
@@ -473,26 +511,142 @@ func shoot() -> void:
 		reload()
 
 
-func _fire_projectile(d: Dictionary) -> void:
-	var cb := camera.global_transform.basis
+# ---------------------------------------------------------------- Cañón de Zurraspa
+
+## Ráfaga de chorros: varios perdigones con daño alto de cerca que baja con la
+## distancia; cada impacto resbala y ensucia al zombie y deja un charco.
+func _fire_spray(d: Dictionary) -> void:
 	var spread: float = lerpf(d["spread_hip"], d["spread_ads"], aim)
-	var aim_dir := (-cb.z + cb.x * randf_range(-spread, spread) + cb.y * randf_range(-spread, spread)).normalized()
+	var cb := camera.global_transform.basis
+	var space := get_world_3d().direct_space_state
 	var from := camera.global_position
-	var q := PhysicsRayQueryParameters3D.create(from, from + aim_dir * 100.0, 1 | 4 | 16, [get_rid()])
-	var hit := get_world_3d().direct_space_state.intersect_ray(q)
-	var target: Vector3 = hit["position"] if not hit.is_empty() else from + aim_dir * 100.0
-	var muzzle_pos: Vector3 = viewmodel.to_global(d["muzzle"])
-	# si el objetivo está muy cerca, que salga desde la cámara para no atravesar paredes
-	if target.distance_to(from) < 1.2:
-		muzzle_pos = from
-	var shot = Milkshake.new()
-	shot.velocity = (target - muzzle_pos).normalized() * float(d["speed"])
-	shot.shooter = self
-	shot.damage = 999999.0 if (game != null and game.instakill_active()) else float(d["damage"])
-	shot.splash = float(d["splash"])
-	shot.exclude = [get_rid()]
-	get_tree().current_scene.add_child(shot)
-	shot.global_position = muzzle_pos
+	var instakill: bool = game != null and game.instakill_active()
+	var max_r: float = d["range"]
+	for i in d["pellets"]:
+		var dirv := (-cb.z + cb.x * randf_range(-spread, spread) + cb.y * randf_range(-spread, spread)).normalized()
+		var q := PhysicsRayQueryParameters3D.create(from, from + dirv * max_r, 1 | 4 | 16, [get_rid()])
+		var hit := space.intersect_ray(q)
+		if hit.is_empty():
+			continue
+		var col = hit["collider"]
+		var dist := from.distance_to(hit["position"])
+		if col and col.has_method("take_hit"):
+			var t := clampf((dist - float(d["falloff"])) / maxf(max_r - float(d["falloff"]), 0.01), 0.0, 1.0)
+			var dmg: float = lerpf(d["damage"], float(d["damage"]) * float(d["min_factor"]), t)
+			zurraspa_hit(col, 999999.0 if instakill else dmg, hit["position"], d)
+		spawn_puddle(hit["position"], d, false)
+	_spray_particles(d, 24, Color(0.30, 0.16, 0.06))
+
+
+## Golpe de zurraspa a un zombie: resbalón + "sucio" + daño.
+func zurraspa_hit(z, dmg: float, pos: Vector3, d: Dictionary) -> void:
+	if not is_instance_valid(z) or z.dead:
+		return
+	z.apply_slip(d["slip"])
+	z.apply_dirty(d["dirty"])
+	z.take_hit(dmg, pos, self)
+
+
+func spawn_puddle(pos: Vector3, d: Dictionary, force: bool) -> void:
+	if not force and puddle_cd > 0.0:
+		return
+	puddle_cd = d.get("puddle_cooldown", 0.0)
+	# buscar el suelo debajo del impacto
+	var q := PhysicsRayQueryParameters3D.create(pos + Vector3.UP * 0.5, pos + Vector3.DOWN * 5.0, 1)
+	var res := get_world_3d().direct_space_state.intersect_ray(q)
+	if res.is_empty() or res["normal"].y < 0.7:
+		return
+	var p = Puddle.new()
+	p.radius = d["puddle_radius"]
+	p.lifetime = d["puddle_life"]
+	p.damage_per_second = d["puddle_dps"]
+	p.slip_duration = d["slip"]
+	p.dirty_duration = d["dirty"]
+	p.shooter = self
+	if d.get("gold", false):
+		p.glow = true
+		p.color = Color(1.0, 0.78, 0.15, 0.85)
+	get_tree().current_scene.add_child(p)
+	p.global_position = res["position"]
+
+
+## Cañón dorado: avalancha que atraviesa a todos los zombies de su camino.
+func _fire_wave(d: Dictionary) -> void:
+	var dir := -camera.global_transform.basis.z
+	dir.y = 0.0
+	if dir.length() < 0.01:
+		dir = -global_transform.basis.z
+	dir = dir.normalized()
+	var w = Avalanche.new()
+	w.shooter = self
+	w.data = d
+	w.direction = dir
+	w.instakill = game != null and game.instakill_active()
+	get_tree().current_scene.add_child(w)
+	w.global_position = global_position + dir * 0.6
+	w.look_at(w.global_position + dir, Vector3.UP)
+	_spray_particles(d, 60, Color(1.0, 0.78, 0.2))
+
+
+## Defecación Nuclear: mata a todos los zombies del mapa (cañón dorado, tecla G).
+func nuclear_discharge() -> bool:
+	if not wdata().has("nuclear_cooldown") or nuclear_cd > 0.0 or busy():
+		return false
+	nuclear_cd = wdata()["nuclear_cooldown"]
+	var kills := 0
+	for z in get_tree().get_nodes_in_group("zombies"):
+		if not z.dead:
+			z.nuclear_kill(self)
+			kills += 1
+	spawn_puddle(global_position, wdata(), true)
+	Sfx.play("nuclear", 0.0)
+	if hud:
+		hud.flash(Color(1.0, 0.82, 0.15))
+		hud.announce("¡DEFECACIÓN NUCLEAR!")
+	return true
+
+
+func _spray_particles(d: Dictionary, amount: int, c: Color) -> void:
+	var p := CPUParticles3D.new()
+	p.amount = amount
+	p.lifetime = 0.6
+	p.one_shot = true
+	p.explosiveness = 0.9
+	p.local_coords = false
+	p.direction = Vector3(0, 0, -1)
+	p.spread = 7.0 if d.has("spray") else 20.0
+	p.initial_velocity_min = 8.0
+	p.initial_velocity_max = 14.0
+	p.gravity = Vector3(0, -9.8, 0)
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.2
+	var m := SphereMesh.new()
+	m.radius = 0.03
+	m.height = 0.06
+	m.radial_segments = 6
+	m.rings = 3
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = c
+	mat.roughness = 0.2
+	if d.get("gold", false):
+		mat.emission_enabled = true
+		mat.emission = c
+	m.material = mat
+	p.mesh = m
+	get_tree().current_scene.add_child(p)
+	p.global_transform = Transform3D(camera.global_transform.basis, viewmodel.to_global(d["muzzle"]))
+	p.emitting = true
+	get_tree().create_timer(1.2).timeout.connect(p.queue_free)
+
+
+## Parpadeo de estática de la tele al disparar.
+func _crt_flash() -> void:
+	var key := "gold_crt" if wdata().get("gold", false) else "crt"
+	var m: StandardMaterial3D = Weapons._mat(key)
+	var base := 2.5 if key == "gold_crt" else 1.2
+	m.emission_energy_multiplier = base * 3.5
+	var tw := create_tween()
+	tw.tween_property(m, "emission_energy_multiplier", base, 0.25)
 
 
 func reload() -> void:

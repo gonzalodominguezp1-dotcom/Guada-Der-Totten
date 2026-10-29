@@ -10,6 +10,7 @@ const L = preload("res://scripts/landmarks.gd")
 const BuyDoor = preload("res://scripts/buy_door.gd")
 const PartPickup = preload("res://scripts/part_pickup.gd")
 const Workbench = preload("res://scripts/workbench.gd")
+const PackAPunch = preload("res://scripts/pack_a_punch.gd")
 const INTERIOR_SHADER = preload("res://shaders/interior_wall.gdshader")
 const FLOOR_SHADER = preload("res://shaders/terracotta_floor.gdshader")
 const COURT_SHADER = preload("res://shaders/court.gdshader")
@@ -648,6 +649,12 @@ static func ayuntamiento(root: Node3D, town) -> void:
 	root.add_child(wb)
 	wb.position = Vector3(5.8, 0, 3.2)
 	wb.rotation.y = -0.4
+	# Pack-a-Punch (provisional: cuando hagamos el easter egg decidimos dónde va)
+	var pap := PackAPunch.new()
+	pap.add_to_group("pack_a_punch")
+	root.add_child(pap)
+	pap.position = Vector3(-6.0, 0, 3.0)
+	pap.rotation.y = 0.4
 
 
 ## Plaza Consistorial: losas, terrazas con sombrillas, bancos, árboles y banderines

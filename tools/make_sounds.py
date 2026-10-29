@@ -338,6 +338,37 @@ def part_pickup():
     return out
 
 
+def zurraspa_spray():
+    # chorro corto y húmedo (el arma es automática: tiene que sonar bien repetido)
+    d = 0.22
+    squirt = bandpass(noise(d), 250, 1800) * env_exp(d, 0.05) * 1.8
+    gurgle = tone(lambda tt: 160 + 60 * np.sin(tt * 90), d) * env_exp(d, 0.06) * 0.7
+    zap = tone(lambda tt: 900 - 500 * tt / d, d, "saw") * env_exp(d, 0.03) * 0.12
+    return mix(squirt, gurgle, zap)
+
+
+def avalanche():
+    # ola de zurraspa: rugido grave que crece y se aleja
+    d = 1.6
+    t = t_axis(d)
+    swell = np.clip(t / 0.25, 0, 1) * np.exp(-np.maximum(t - 0.25, 0) * 2.2)
+    roar = lowpass_fast(noise(d), 500) * swell * 3.0
+    slosh = bandpass(noise(d), 300, 1400) * swell * (0.6 + 0.4 * np.sin(t * 23)) * 1.2
+    sub = tone(lambda tt: 55 + 20 * np.exp(-tt * 3), d) * swell * 0.8
+    return mix(roar, slosh, sub)
+
+
+def nuclear():
+    # Defecación Nuclear: pedorreta gigante + explosión
+    d = 3.2
+    t = t_axis(d)
+    brr = tone(lambda tt: 70 + 25 * np.sin(tt * 31) - 15 * tt, 1.2, "saw")
+    brr = lowpass_fast(brr, 700) * env_exp(1.2, 0.6) * 1.2
+    boom = lowpass_fast(noise(d), 300) * np.exp(-np.maximum(t - 0.9, 0) * 1.6) * (t > 0.9) * 4.0
+    sub = tone(lambda tt: 45 * np.exp(-tt * 0.5) + 20, d) * np.exp(-np.maximum(t - 0.9, 0) * 1.2) * (t > 0.9) * 1.2
+    return mix(at(brr, 0.0, d), boom, sub)
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "assets/sounds"
     os.makedirs(out, exist_ok=True)
@@ -366,13 +397,19 @@ def main():
         "zurraspa_shot": zurraspa_shot(),
         "splat": splat(),
         "part_pickup": part_pickup(),
+        "zurraspa_spray": zurraspa_spray(),
+        "avalanche": avalanche(),
+        "nuclear": nuclear(),
     }
     for i in range(6):
         sounds[f"zombie_moan_{i}"] = zombie_moan(10 + i, dur=1.4 + 0.3 * (i % 3), base=80 + 12 * i)
     for i in range(3):
         sounds[f"zombie_attack_{i}"] = zombie_attack(40 + i)
     gains = {"wind_loop": 0.5, "machine_hum": 0.4, "round_start": 0.8}
+    only = set(sys.argv[2:])   # opcional: generar solo estos sonidos
     for name, x in sounds.items():
+        if only and name not in only:
+            continue
         save(os.path.join(out, name + ".wav"), x, gains.get(name, 0.9))
     print(f"{len(sounds)} sonidos en {out}")
 

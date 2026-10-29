@@ -15,7 +15,11 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
 - Edificios con interior en `scripts/interiors.gd` (`shell()` = caja hueca con huecos de puerta):
   bazar chino (pieza "canon"), L'Antica (pieza "tele"), polideportivo (garita bajo las gradas,
   pieza "calzoncillo"), Ayuntamiento + mesa de trabajo (grupo "workbench") y decoración de la
-  Plaza Consistorial. Arma maravilla "zurraspa" (proyectil `scripts/milkshake.gd`).
+  Plaza Consistorial. Arma maravilla "zurraspa" (diseño de un colega del usuario): ráfaga
+  de chorros que hace resbalar y ensucia (`apply_slip`/`apply_dirty` en zombie.gd) y deja charcos
+  (`scripts/zurraspa_puddle.gd`). Versión Pack-a-Punch "zurraspa_pap": avalancha
+  (`scripts/zurraspa_wave.gd`) y Defecación Nuclear con [G]. Pack-a-Punch provisional en la
+  plaza (`scripts/pack_a_punch.gd`, mejora según la clave "pap" de weapons.gd).
 - Edificios a mano sin interior (Sala Groove nº 6) en `scripts/landmarks.gd`; su posición
   aproximada está en `EXTRA_PREFABS` de `tools/osm_to_json.py`. Plazuelas (acera ensanchada)
   delante de Casa de la Juventud y Hogar del Mayor.

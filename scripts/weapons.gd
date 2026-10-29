@@ -23,16 +23,38 @@ const DATA := {
 		"cost": 500, "hip": Vector3(0.16, -0.18, -0.36), "ads": Vector3(0.0, -0.055, -0.22),
 		"sight_y": 0.059, "muzzle": Vector3(0, 0.03, -0.70), "ads_fov": 62.0,
 	},
-	# Arma maravilla del mapa: se monta con 3 piezas en la mesa de trabajo
+	# Arma maravilla del mapa: se monta con 3 piezas en la mesa de trabajo.
+	# Ficha del colega de Gonzalo: ráfaga de chorros, daño alto de cerca que baja
+	# con la distancia (alcance medio), un solo cargador grande sin reserva.
+	# Los zombies que reciben o pisan zurraspa resbalan y "se sienten sucios".
 	"zurraspa": {
 		"name": "Cañón de Zurraspa",
-		"damage": 1400.0, "pellets": 1, "mag": 20, "reserve": 140,
-		"fire_delay": 0.33, "reload": 2.8, "auto": false,
-		"spread_hip": 0.02, "spread_ads": 0.006, "range": 120.0, "falloff": 999.0,
-		"recoil": 1.3, "kick": 0.02, "sound": "zurraspa_shot", "pitch": 1.0, "volume": -1.0,
+		"damage": 45.0, "pellets": 3, "mag": 60, "reserve": 0,
+		"fire_delay": 0.09, "reload": 2.8, "auto": true,
+		"spread_hip": 0.105, "spread_ads": 0.07, "range": 14.0, "falloff": 4.0,
+		"min_factor": 0.25,
+		"recoil": 0.5, "kick": 0.004, "sound": "zurraspa_spray", "pitch": 1.0, "volume": -6.0,
 		"cost": 0, "hip": Vector3(0.17, -0.19, -0.42), "ads": Vector3(0.0, -0.16, -0.36),
 		"sight_y": 0.16, "muzzle": Vector3(0, 0.07, -0.33), "ads_fov": 62.0,
-		"projectile": true, "splash": 2.8, "speed": 32.0,
+		"spray": true, "slip": 2.0, "dirty": 5.0,
+		"puddle_cooldown": 0.4, "puddle_radius": 1.8, "puddle_life": 10.0, "puddle_dps": 15.0,
+		"pap": "zurraspa_pap",
+	},
+	# Pack-a-Punch: «¡De la taza al apocalipsis!». Dispara una avalancha que
+	# atraviesa a todos los zombies de su camino y deja charcos dorados.
+	# [G] = Defecación Nuclear (mata a todos los zombies, 90 s de espera).
+	"zurraspa_pap": {
+		"name": "Cañón de Zurraspa Dorado",
+		"damage": 3000.0, "pellets": 1, "mag": 30, "reserve": 90,
+		"fire_delay": 0.55, "reload": 3.2, "auto": true,
+		"spread_hip": 0.0, "spread_ads": 0.0, "range": 22.0, "falloff": 999.0,
+		"recoil": 1.4, "kick": 0.03, "sound": "avalanche", "pitch": 1.0, "volume": -2.0,
+		"cost": 0, "hip": Vector3(0.17, -0.19, -0.42), "ads": Vector3(0.0, -0.16, -0.36),
+		"sight_y": 0.16, "muzzle": Vector3(0, 0.07, -0.33), "ads_fov": 62.0,
+		"wave": true, "wave_speed": 14.0, "wave_width": 5.0, "wave_height": 3.0, "wave_spacing": 3.0,
+		"slip": 3.0, "dirty": 8.0,
+		"puddle_radius": 2.5, "puddle_life": 14.0, "puddle_dps": 30.0,
+		"nuclear_cooldown": 90.0, "gold": true,
 	},
 }
 
@@ -146,6 +168,21 @@ static func _mat(key: String) -> StandardMaterial3D:
 			m.emission_enabled = true
 			m.emission = Color(0.45, 0.30, 0.10)
 			m.emission_energy_multiplier = 1.2
+		"gold":
+			# poco metálico: en Compatibilidad no hay reflejos y el oro puro sale negro
+			m.albedo_color = Color(1.0, 0.76, 0.18)
+			m.metallic = 0.45
+			m.roughness = 0.3
+			m.emission_enabled = true
+			m.emission = Color(0.55, 0.38, 0.05)
+			m.emission_energy_multiplier = 0.35
+		"gold_crt":
+			m.albedo_color = Color(1.0, 0.82, 0.15)
+			m.metallic = 1.0
+			m.roughness = 0.2
+			m.emission_enabled = true
+			m.emission = Color(1.0, 0.82, 0.15)
+			m.emission_energy_multiplier = 2.5
 		"copper":
 			m.albedo_color = Color(0.72, 0.40, 0.22)
 			m.metallic = 1.0
@@ -248,8 +285,10 @@ static func build_model(id: String, with_hands := false) -> Node3D:
 			_shotgun(root)
 			if with_hands:
 				_shotgun_hands(root)
-		"zurraspa":
+		"zurraspa", "zurraspa_pap":
 			_zurraspa(root)
+			if id == "zurraspa_pap":
+				_gild(root)
 			if with_hands:
 				_pistol_hands(root)
 	return root
@@ -422,6 +461,24 @@ static func part_model(id: String, s := 1.0) -> Node3D:
 			_tube(root, 0.06 * s, 0.03 * s, Vector3(0, 0, -0.205) * s, "copper", 16)
 			_sphere(root, 0.03 * s, Vector3(0.04, 0.03, -0.1) * s, "zurraspa", Vector3(1.0, 0.4, 1.6))
 	return root
+
+
+## Versión dorada: pantalla de la tele dorada y radiactiva, calzones de oro.
+static func _gild(root: Node3D) -> void:
+	var swap := {_mat("crt"): _mat("gold_crt"), _mat("cotton"): _mat("gold"), _mat("elastic"): _mat("gold"),
+		_mat("plastic"): _mat("gold"), _mat("copper"): _mat("gold")}
+	var stack: Array = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D and swap.has(n.material_override):
+			n.material_override = swap[n.material_override]
+		stack.append_array(n.get_children())
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.82, 0.15)
+	l.light_energy = 1.2
+	l.omni_range = 1.5
+	l.position = Vector3(0, 0.07, -0.36)
+	root.add_child(l)
 
 
 static func _zurraspa(root: Node3D) -> void:
