@@ -84,7 +84,7 @@ func _process(_delta: float) -> bool:
 			check(t.bar.barricades.size() >= 3, "al menos 3 ventanas con barricada")
 			check(t.bar.is_inside_interior(p.global_position), "el jugador empieza dentro del bar")
 			check(not t.exterior_open, "la calle empieza cerrada")
-	if frame == 240:
+	if frame == 450:
 		var map: RID = t.nav_region.get_navigation_map()
 		var a: Vector3 = t.bar.to_global(Vector3(5.0, 0, -6.0))
 		var b: Vector3 = t.bar.to_global(Vector3(5.0, 0, -20.0))
@@ -201,7 +201,7 @@ func _process(_delta: float) -> bool:
 		# zonas, piezas y Cañón de Zurraspa
 		var map: RID = t.nav_region.get_navigation_map()
 		var start: Vector3 = t.bar.to_global(Vector3(0.0, 0.0, 3.0))
-		check(t.zone_doors.size() == 3, "3 puertas de escombros entre zonas (%d)" % t.zone_doors.size())
+		check(t.zone_doors.size() == 4, "4 puertas de escombros entre zonas (%d)" % t.zone_doors.size())
 		var parts := get_nodes_in_group("parts")
 		check(parts.size() == 3, "3 piezas del cañón en el mapa (%d)" % parts.size())
 		for pt in parts:
@@ -217,6 +217,17 @@ func _process(_delta: float) -> bool:
 		for pt in parts:
 			pt.interact(p)
 		check(main.parts.size() == 3, "recoger las 3 piezas")
+		# camino andando del bar al portal del instituto
+		var pi = t.portal_instituto
+		check(pi != null, "portal en el instituto")
+		if pi:
+			var goal: Vector3 = pi.global_transform * Vector3(0, 0, 2.0)
+			var path := NavigationServer3D.map_get_path(map, start, goal, true)
+			var end_d := 999.0 if path.is_empty() else path[path.size() - 1].distance_to(goal)
+			var plen := 0.0
+			for i in range(1, path.size()):
+				plen += path[i - 1].distance_to(path[i])
+			check(end_d < 1.0, "se llega andando al portal del instituto (%.0f m de camino)" % plen)
 		var wbs := get_nodes_in_group("workbench")
 		check(wbs.size() == 1, "mesa de trabajo en la plaza")
 		if wbs.size() == 1:
@@ -239,6 +250,34 @@ func _process(_delta: float) -> bool:
 	if frame == 2710 + 262:
 		var z = log_lines[0]
 		check(is_instance_valid(z) and (z.slip_t > 0.0 or z.dead), "la zurraspa hace resbalar al zombie")
+	if frame == 2710 + 300:
+		var pi = t.portal_instituto
+		p.points += 2000
+		pi.interact(p)
+		check(pi.active and pi.other.active and t.zone_open("tanatorio"), "encender el portal abre el tanatorio")
+		pi.teleport(p)
+		check(t.tanatorio.contains(p.global_position), "el portal lleva al tanatorio")
+		var Z = load("res://scripts/zombie.gd")
+		var far = Z.new()
+		far.player = p
+		far.manager = main.rounds
+		main.add_child(far)
+		main.rounds.alive += 1
+		far.global_position = t.bar.global_position
+		far.state = far.State.CHASE
+		main.rounds.relocate_zombies()
+		check(far.global_position.distance_to(p.global_position) < 80.0, "los zombies que se quedan atrás reaparecen cerca")
+		far.take_hit(1e9, far.global_position + Vector3.UP, null)
+	if frame == 2710 + 320:
+		check(main.in_tanatorio and main.env.fog_density > 0.02, "niebla del tanatorio")
+		var spot = main.rounds._pick_spawn()
+		check(spot != null and t.tanatorio.contains(spot["pos"]), "los zombies salen en el tanatorio")
+		var map: RID = t.nav_region.get_navigation_map()
+		var paps := get_nodes_in_group("pack_a_punch")
+		var goal: Vector3 = paps[0].global_transform * Vector3(0, 0, 1.4)
+		var path := NavigationServer3D.map_get_path(map, p.global_position, goal, true)
+		var end_d := 999.0 if path.is_empty() else path[path.size() - 1].distance_to(goal)
+		check(end_d < 1.0, "se llega andando al Pack-a-Punch del tanatorio (queda a %.1f m)" % end_d)
 	if frame == 2710 + 330:
 		var z = log_lines[0]
 		check(not is_instance_valid(z) or z.dead, "la ráfaga de zurraspa mata al zombie")

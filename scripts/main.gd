@@ -17,6 +17,10 @@ var rounds: Node
 var flicker_t := 0.0
 var powerups := {}   # nombre -> segundos restantes
 var parts := {}      # piezas del Cañón de Zurraspa conseguidas
+var env: Environment
+var in_tanatorio := false
+var mood_tween: Tween
+var base_mood := {}
 
 
 func _ready() -> void:
@@ -30,6 +34,10 @@ func _ready() -> void:
 	town.build(TOWN_JSON)
 	for wb in get_tree().get_nodes_in_group("workbench"):
 		wb.game = self
+	for pt in get_tree().get_nodes_in_group("portals"):
+		pt.game = self
+	if town.tanatorio:
+		town.tanatorio.visible = false
 
 	hud = HudScript.new()
 	hud.name = "HUD"
@@ -54,6 +62,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	flicker_t += delta
+	if town.tanatorio and player:
+		var now: bool = town.tanatorio.contains(player.global_position)
+		if now != in_tanatorio:
+			set_tanatorio_mood(now)
 	for l in town.lamps:
 		var light: OmniLight3D = l["light"]
 		match l["mode"]:
@@ -68,6 +80,22 @@ func _process(delta: float) -> void:
 			if powerups[k] <= 0.0:
 				powerups.erase(k)
 		hud.set_powerups(powerups)
+
+
+## Al cruzar el portal: en el tanatorio, niebla espesa, colores apagados y
+## solo se dibuja ese nivel (y al volver, al revés).
+func set_tanatorio_mood(on: bool) -> void:
+	in_tanatorio = on
+	town.nav_region.visible = not on
+	town.tanatorio.visible = on
+	if mood_tween:
+		mood_tween.kill()
+	mood_tween = create_tween().set_parallel(true)
+	var target := {"fog_density": 0.045, "fog_light_color": Color(0.085, 0.095, 0.12),
+		"ambient_light_energy": base_mood["ambient_light_energy"] * 0.45, "adjustment_saturation": 0.5,
+		"adjustment_brightness": 0.85} if on else base_mood
+	for k in target:
+		mood_tween.tween_property(env, k, target[k], 1.5)
 
 
 # ---------------------------------------------------------------- power-ups
@@ -153,7 +181,7 @@ func _add_mouse(action: String, button: MouseButton) -> void:
 
 
 func _setup_environment() -> void:
-	var env := Environment.new()
+	env = Environment.new()
 	var compat := RenderingServer.get_current_rendering_method() == "gl_compatibility"
 
 	var sky_mat := ProceduralSkyMaterial.new()
@@ -198,6 +226,9 @@ func _setup_environment() -> void:
 		env.volumetric_fog_albedo = Color(0.75, 0.77, 0.8)
 		env.volumetric_fog_length = 70.0
 
+	base_mood = {"fog_density": env.fog_density, "fog_light_color": env.fog_light_color,
+		"ambient_light_energy": env.ambient_light_energy, "adjustment_saturation": env.adjustment_saturation,
+		"adjustment_brightness": env.adjustment_brightness}
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)

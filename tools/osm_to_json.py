@@ -4,7 +4,11 @@ Convierte un archivo .osm exportado desde openstreetmap.org en data/town.json,
 que es lo que lee el juego para construir el pueblo.
 
 Uso básico:
-    python3 tools/osm_to_json.py mi_pueblo.osm data/town.json
+    python3 tools/osm_to_json.py mi_pueblo.osm [más.osm ...] data/town.json
+
+Se pueden pasar varias exportaciones: se fusionan y el origen de coordenadas
+es el centro de la primera (así no se mueve nada al añadir trozos de mapa).
+Con --tanatorio archivo.osm se añade el nivel aparte del tanatorio.
 
 Opciones:
     --crop X0,Z0,X1,Z1   recorta la zona jugable (metros desde el centro de la
@@ -174,6 +178,21 @@ def parse_height(tags, way_id):
     return (1, 2, 2, 2, 3, 3)[int(way_id) % 6] * 3.1 + 0.4
 
 
+def load_many(srcs):
+    nodes, node_tags, ways, seen = {}, {}, [], set()
+    bb0 = None
+    for src in srcs:
+        n, nt, bb, w = load_osm(src)
+        nodes.update(n)
+        node_tags.update(nt)
+        bb0 = bb0 or bb
+        for way in w:
+            if way[0] not in seen:
+                seen.add(way[0])
+                ways.append(way)
+    return nodes, node_tags, bb0, ways
+
+
 def load_osm(src):
     root = ET.parse(src).getroot()
     nodes, node_tags = {}, {}
@@ -199,8 +218,8 @@ def load_osm(src):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("src")
-    ap.add_argument("dst")
+    ap.add_argument("files", nargs="+", help="uno o más .osm y, al final, el .json de salida")
+    ap.add_argument("--tanatorio", help=".osm del tanatorio (nivel aparte, se llega por el portal)")
     ap.add_argument("--crop", help="X0,Z0,X1,Z1 en metros desde el centro de la exportación")
     ap.add_argument("--start", default="", help="nombre del lugar de inicio")
     ap.add_argument("--no-fill", action="store_true")
@@ -208,7 +227,10 @@ def main():
     args = ap.parse_args()
     rng = random.Random(args.seed)
 
-    nodes, node_tags, (minlat, minlon, maxlat, maxlon), ways = load_osm(args.src)
+    if len(args.files) < 2:
+        ap.error("faltan archivos: entrada(s) .osm y salida .json")
+    args.dst = args.files[-1]
+    nodes, node_tags, (minlat, minlon, maxlat, maxlon), ways = load_many(args.files[:-1])
     lat0, lon0 = (minlat + maxlat) / 2, (minlon + maxlon) / 2
     kx = 111320.0 * math.cos(math.radians(lat0))
     kz = 110540.0
@@ -314,7 +336,12 @@ def main():
     playable = []
     for pl in PLAYABLE:
         for wid, tags, refs in ways:
-            if tags.get("name") != pl["street"] or tags.get("highway") not in HIGHWAY_WIDTHS:
+            if tags.get("highway") not in HIGHWAY_WIDTHS:
+                continue
+            if "way" in pl:
+                if wid != pl["way"]:
+                    continue
+            elif tags.get("name") != pl["street"]:
                 continue
             pts = [proj(*nodes[r]) for r in refs if r in nodes]
             if len(pts) < 2:
@@ -323,18 +350,26 @@ def main():
             for part in clip_polyline(pts, (r[0], r[1], r[2], r[3])):
                 part = clip_polyline(part, (crop[0] - 5, crop[1] - 5, crop[2] + 5, crop[3] + 5))
                 for pp in part:
-                    playable.append({"zone": pl["zone"], "name": pl["street"],
+                    playable.append({"zone": pl["zone"], "name": pl.get("street", tags.get("name", "")),
                                      "points": [rel(p) for p in pp], "width": HIGHWAY_WIDTHS[tags["highway"]]})
     areas = []
     for pz in plazuelas:
         areas.append({"zone": "avenida", "name": pz["name"], "points": pz["points"]})
     for a in PLAYABLE_AREAS:
-        areas.append({"zone": a["zone"], "name": a["name"], "points": [rel(p) for p in a["points"]]})
+        ar = {"zone": a["zone"], "name": a["name"], "points": [rel(p) for p in a["points"]]}
+        if a.get("fence"):
+            ar["fence"] = True
+            ar["gates"] = [rel(g) for g in a.get("gates", [])]
+        areas.append(ar)
     for pl in plazas:
         if pl["name"] in SQUARE_ZONES:
             areas.append({"zone": SQUARE_ZONES[pl["name"]], "name": pl["name"], "points": pl["points"]})
     zone_doors = []
     for zd in ZONE_DOORS:
+        if "pos" in zd:
+            zone_doors.append({"zone": zd["zone"], "cost": zd["cost"], "label": zd["label"], "pos": rel(zd["pos"]),
+                               "dir": zd["dir"], "width": zd["width"]})
+            continue
         for wid, tags, refs in ways:
             if tags.get("name") != zd["street"]:
                 continue
@@ -357,7 +392,9 @@ def main():
     real_count = len(buildings)
     if not args.no_fill:
         fill_houses(buildings, streets, plazas, pois, (crop[0] - ox, crop[1] - oz, crop[2] - ox, crop[3] - oz), rng,
-                    extra_obstacles=[pf["footprint"] for pf in prefabs] + [a["points"] for a in areas])
+                    extra_obstacles=[pf["footprint"] for pf in prefabs] + [a["points"] for a in areas]
+                    + [[rel(p) for p in poly] for poly in NO_FILL_AREAS],
+                    near=[pl["points"] for pl in playable] + [a["points"] + a["points"][:1] for a in areas])
 
     start = None
     want = args.start.lower()
@@ -388,6 +425,8 @@ def main():
         "zone_doors": zone_doors,
         "pois": pois,
     }
+    if args.tanatorio:
+        out["tanatorio"] = tanatorio_json(args.tanatorio)
     with open(args.dst, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False)
     print(f"{real_count} edificios de OSM + {len(buildings) - real_count} casas de relleno, "
@@ -397,7 +436,8 @@ def main():
 
 
 PREFAB_SIZE = {"bar_chiqui": (15.0, 22.0), "bazar": (14.0, 11.0), "sala_groove": (13.0, 9.0),
-               "lantica": (16.0, 10.0), "polideportivo": (46.0, 30.0), "ayuntamiento": (16.0, 12.4)}  # ancho, fondo (m)
+               "lantica": (16.0, 10.0), "polideportivo": (46.0, 30.0), "ayuntamiento": (16.0, 12.4),
+               "instituto": (17.7, 67.9), "colegio": (30.2, 17.9)}  # ancho, fondo (m)
 
 # Edificios hechos a mano que no están en OSM: posición aproximada (x, z en
 # metros desde el centro de la exportación) y calle a la que dan.
@@ -411,6 +451,11 @@ EXTRA_PREFABS = [
     {"prefab": "polideportivo", "front": [-40.3, 191.2], "fwd": [-0.168, -0.986]},
     # Ayuntamiento: sustituye al edificio de OSM, fachada a la Plaza Consistorial
     {"prefab": "ayuntamiento", "front": [231.4, 129.7], "fwd": [-0.248, 0.969]},
+    # IES Luis García Berlanga: bloque de piedra en la punta noroeste (da a Camino Chozas)
+    # y ala de ladrillo hacia el sureste. Sustituye al edificio 225816396 de OSM.
+    {"prefab": "instituto", "front": [-94.75, 470.85], "fwd": [-0.5295, -0.8483]},
+    # CEIP Alejandro Rubio: el edificio que da a la Calle Prado Panetes (225816394)
+    {"prefab": "colegio", "front": [-31.65, 458.25], "fwd": [0.753, -0.658]},
 ]
 
 # Zonas jugables (coordenadas de la exportación). Todo lo demás queda fuera,
@@ -422,10 +467,26 @@ PLAYABLE = [
     {"zone": "plaza", "street": "Calle Pozo", "rect": [-1e9, -1e9, 1e9, 1e9]},
     {"zone": "plaza", "street": "Plaza Libertad", "rect": [-1e9, -1e9, 1e9, 1e9]},
     {"zone": "plaza", "street": "Calle Egido", "rect": [-1e9, -1e9, 1e9, 1e9]},
+    # hacia el instituto: Eras de Abajo (desde el callejón de la biblioteca), Eras del
+    # Medio, la glorieta, el vial del instituto y un trozo de Prado Panetes (colegio)
+    {"zone": "instituto", "street": "Calle Eras de Abajo", "rect": [-1e9, 186, 1e9, 382]},
+    {"zone": "instituto", "street": "Calle Eras del Medio", "rect": [-90, 370, -40, 420]},
+    {"zone": "instituto", "way": "835855327", "rect": [-1e9, -1e9, 1e9, 1e9]},
+    {"zone": "instituto", "way": "938579581", "rect": [-1e9, -1e9, 1e9, 1e9]},
+    {"zone": "instituto", "way": "835855322", "rect": [-1e9, -1e9, 1e9, 1e9]},
+    {"zone": "instituto", "street": "Calle Prado Panetes", "rect": [-40, 410, -5, 440]},
 ]
 PLAYABLE_AREAS = [
     {"zone": "poli", "name": "Plaza trasera",
      "points": [[-60, 166], [-3, 162], [-3, 186.5], [-17, 187.5], [-61, 194.5]]},
+    # callejón entre la biblioteca y el polideportivo (de la plaza trasera a Eras de Abajo)
+    {"zone": "instituto", "name": "Callejón de la biblioteca",
+     "points": [[-60.5, 189.3], [-74.5, 189.8], [-74.5, 195.6], [-63.4, 195.5], [-60.8, 194.8]]},
+    # recinto del instituto: valla verde con dos puertas
+    {"zone": "instituto", "name": "Patio del instituto", "fence": True,
+     "gates": [[-97.0, 463.8], [-40.0, 437.2]],
+     "points": [[-42, 437], [-46, 436], [-80, 454.3], [-105.1, 468.1], [-106.7, 472.9], [-104.9, 476.4],
+                [-63.2, 543.6], [-49, 523], [-33.4, 511.8], [-62.7, 463.3], [-30.2, 437.4]]},
 ]
 SQUARE_ZONES = {"Plaza Consistorial": "plaza", "Plaza Libertad": "plaza"}
 # Puertas de zona (escombros que se compran): calle, eje y valor donde cortan
@@ -436,7 +497,57 @@ ZONE_DOORS = [
      "label": "despejar la Calle Nogal (polideportivo)"},
     {"zone": "plaza", "street": "Calle Pozo", "axis": 0, "value": 73.0, "cost": 1250,
      "label": "despejar la Calle Pozo (plaza del Ayuntamiento)"},
+    {"zone": "instituto", "pos": [-61.6, 192.2], "dir": [-1.0, 0.0], "width": 2.0, "cost": 1500,
+     "label": "despejar el callejón (hacia el instituto)"},
 ]
+
+
+# Recintos donde no se ponen casas de relleno (patio del CEIP Alejandro Rubio)
+NO_FILL_AREAS = [
+    [[-30.2, 437.4], [10.9, 482.7], [67.7, 513.9], [60.5, 528.0], [50.0, 548.7], [46.3, 556.3], [37.0, 573.9],
+     [25.7, 596.3], [-15.0, 570.2], [-47.7, 558.3], [-63.2, 543.6], [-49.0, 523.0], [-33.4, 511.8], [-62.7, 463.3]],
+]
+
+
+# ------------------------------------------------------------------ tanatorio
+# Nivel aparte al que se llega por el portal del instituto. Del .osm solo se usa
+# el tanatorio, los caminos y el aparcamiento; el cementerio NO se modela (solo
+# se usa su contorno para cerrarlo con un muro y cipreses, por respeto).
+TANATORIO_BUILDING = "1227455387"
+TANATORIO_RADIUS = 75.0
+
+
+def tanatorio_json(src):
+    nodes, _nt, _bb, ways = load_osm(src)
+    by_id = {w[0]: w for w in ways}
+    if TANATORIO_BUILDING not in by_id:
+        return None
+    refs = by_id[TANATORIO_BUILDING][2]
+    lat0 = sum(nodes[r][0] for r in refs[:-1]) / (len(refs) - 1)
+    lon0 = sum(nodes[r][1] for r in refs[:-1]) / (len(refs) - 1)
+    kx = 111320.0 * math.cos(math.radians(lat0))
+    kz = 110540.0
+
+    def proj(r):
+        la, lo = nodes[r]
+        return [round((lo - lon0) * kx, 2), round(-(la - lat0) * kz, 2)]
+
+    out = {"building": [], "roads": [], "parking": [], "cemetery": []}
+    for wid, tags, refs in ways:
+        pts = [proj(r) for r in refs if r in nodes]
+        if not pts or min(math.hypot(*p) for p in pts) > TANATORIO_RADIUS:
+            continue
+        closed = refs[0] == refs[-1]
+        if wid == TANATORIO_BUILDING:
+            out["building"] = pts[:-1]
+        elif tags.get("landuse") == "cemetery":
+            out["cemetery"].append(pts[:-1] if closed else pts)
+        elif tags.get("amenity") == "parking" and closed:
+            out["parking"].append(pts[:-1])
+        elif tags.get("highway") in HIGHWAY_WIDTHS:
+            out["roads"].append({"points": pts, "width": HIGHWAY_WIDTHS[tags["highway"]] + 1.0,
+                                 "name": tags.get("name", "")})
+    return out
 
 
 def set_fixed(pf, front, fwd):
@@ -545,8 +656,15 @@ def make_plazuelas(buildings, streets):
     return out
 
 
-def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=()):
+FILL_NEAR = 70.0   # solo se rellenan casas a esta distancia de lo jugable (rendimiento)
+
+
+def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=(), near=()):
     """Coloca casas adosadas a lo largo de las calles donde OSM no tiene edificios."""
+    near_segs = []
+    for line in near:
+        for i in range(len(line) - 1):
+            near_segs.append((line[i], line[i + 1], bbox([line[i], line[i + 1]], FILL_NEAR)))
     inner = (rect[0] + 2, rect[1] + 2, rect[2] - 2, rect[3] - 2)
     seg_list = []  # (a, b, radio libre, bbox)
     for s in streets:
@@ -572,6 +690,9 @@ def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=())
             if bbox_hit(bb, qb) and polys_overlap(poly, q):
                 return False
         c = centroid(poly)
+        if near_segs and not any(sb[0] <= c[0] <= sb[2] and sb[1] <= c[1] <= sb[3] and pt_seg_dist(c, a, b) < FILL_NEAR
+                                 for a, b, sb in near_segs):
+            return False
         return all(math.dist(c, k) > 9.0 for k in keep_clear)
 
     for s in streets:

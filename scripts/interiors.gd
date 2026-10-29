@@ -4,13 +4,16 @@ extends RefCounted
 ##   - "lantica":       restaurante L'Antica, al oeste del aparcamiento. Pieza: la tele.
 ##   - "polideportivo": pista de fútbol sala, gradas, espalderas y garita. Pieza: calzoncillo.
 ##   - "ayuntamiento":  fachada de sillería con espadaña y reloj; mesa de trabajo delante.
+##   - "instituto":     IES Luis García Berlanga: bloque de piedra con el vestíbulo (y el
+##                      portal al tanatorio) y ala de ladrillo.
+##   - "colegio":       CEIP Alejandro Rubio (solo fachada, se ve desde la glorieta).
 ## Origen local: centro del frente, a ras de suelo; +Z = fuera (calle o plaza).
 
 const L = preload("res://scripts/landmarks.gd")
 const BuyDoor = preload("res://scripts/buy_door.gd")
 const PartPickup = preload("res://scripts/part_pickup.gd")
 const Workbench = preload("res://scripts/workbench.gd")
-const PackAPunch = preload("res://scripts/pack_a_punch.gd")
+const Portal = preload("res://scripts/portal.gd")
 const INTERIOR_SHADER = preload("res://shaders/interior_wall.gdshader")
 const FLOOR_SHADER = preload("res://shaders/terracotta_floor.gdshader")
 const COURT_SHADER = preload("res://shaders/court.gdshader")
@@ -649,12 +652,6 @@ static func ayuntamiento(root: Node3D, town) -> void:
 	root.add_child(wb)
 	wb.position = Vector3(5.8, 0, 3.2)
 	wb.rotation.y = -0.4
-	# Pack-a-Punch (provisional: cuando hagamos el easter egg decidimos dónde va)
-	var pap := PackAPunch.new()
-	pap.add_to_group("pack_a_punch")
-	root.add_child(pap)
-	pap.position = Vector3(-6.0, 0, 3.0)
-	pap.rotation.y = 0.4
 
 
 ## Plaza Consistorial: losas, terrazas con sombrillas, bancos, árboles y banderines
@@ -775,3 +772,109 @@ static func plaza_decor(area: Dictionary, town) -> void:
 	bm.mesh = bst.commit()
 	bm.material_override = bmat
 	root.add_child(bm)
+
+
+# ---------------------------------------------------------------- IES Luis García Berlanga
+
+static func instituto(root: Node3D, town) -> void:
+	var w := 17.7
+	var block_d := 9.0
+	var stone_h := 9.5
+	# bloque de mampostería con el vestíbulo
+	var tile := ShaderMaterial.new()
+	tile.shader = FLOOR_SHADER
+	tile.set_shader_parameter("noise_tex", town.noise_tex)
+	tile.set_shader_parameter("base", Color(0.66, 0.64, 0.6))
+	tile.set_shader_parameter("tile", 0.5)
+	var lining := ShaderMaterial.new()
+	lining.shader = INTERIOR_SHADER
+	lining.set_shader_parameter("noise_tex", town.noise_tex)
+	lining.set_shader_parameter("upper", Color(0.88, 0.87, 0.82))
+	lining.set_shader_parameter("lower", Color(0.42, 0.5, 0.62))
+	shell(root, town, {"w": w, "d": block_d, "h": stone_h, "kind": 1, "style": 1, "tint": Color(0.86, 0.8, 0.7),
+		"seed": 9, "windows": false, "roof": "none", "lining": lining, "ceil_h": 3.4,
+		"doors": [{"face": "front", "t0": w * 0.5 - 3.2, "t1": w * 0.5 - 0.6, "h": 2.8}]})
+	_floor(root, Vector3(0, 0.02, -block_d * 0.5), Vector2(w - 0.6, block_d - 0.6), tile)
+	L._box(root, Vector3(0, stone_h + 0.1, -block_d * 0.5), Vector3(w + 0.2, 0.2, block_d + 0.2), _m(Color(0.55, 0.55, 0.55), 0.8))
+	# cristalera y puertas abiertas de la entrada
+	var glass := _m(Color(0.1, 0.13, 0.15), 0.1, 0.3)
+	var frame := _m(Color(0.6, 0.62, 0.64), 0.4, 0.6)
+	L._box(root, Vector3(-1.9, 1.4, 0.02), Vector3(0.1, 2.8, 0.1), frame)
+	L._box(root, Vector3(-1.9, 2.9, 0.02), Vector3(2.8, 0.15, 0.12), frame)
+	for side in [-1.0, 1.0]:
+		var leaf := L._box(root, Vector3(-1.9 + side * 1.9, 1.35, -0.5), Vector3(0.05, 2.6, 1.1), glass)
+		leaf.rotation.y = 0.2 * side
+	L._box(root, Vector3(-5.5, 1.6, 0.03), Vector3(3.4, 2.6, 0.06), glass)
+	# cartel: banda roja de la Comunidad y nombre del centro
+	var sign := L._box(root, Vector3(1.5, 6.9, 0.08), Vector3(6.0, 2.0, 0.08), _m(Color(0.95, 0.95, 0.93), 0.6))
+	L._box(sign, Vector3(0, 0.78, 0.045), Vector3(6.0, 0.4, 0.01), _m(Color(0.8, 0.05, 0.08), 0.5))
+	L._label(sign, "Comunidad de Madrid", Vector3(-1.6, 0.78, 0.06), 36, Color.WHITE, 0.004)
+	L._label(sign, "Instituto\nLuis García Berlanga", Vector3(0, -0.2, 0.05), 64, Color(0.75, 0.05, 0.08), 0.005)
+	# mástiles con banderas delante
+	var flag_cols := [[Color(0.8, 0.1, 0.12), Color(0.8, 0.1, 0.12)], [Color(0.75, 0.1, 0.1), Color(0.95, 0.8, 0.1)], [Color(0.1, 0.2, 0.6), Color(0.1, 0.2, 0.6)]]
+	for k in 3:
+		var x := -6.5 + k * 1.3
+		L._cyl(root, Vector3(x, 3.2, 1.6), 0.03, 0.04, 6.4, frame)
+		L._box(root, Vector3(x + 0.45, 5.8, 1.6), Vector3(0.9, 0.6, 0.02), _m(flag_cols[k][0], 0.8))
+		L._box(root, Vector3(x + 0.45, 5.8, 1.61), Vector3(0.9, 0.2, 0.02), _m(flag_cols[k][1], 0.8))
+	# ala de ladrillo (dos plantas) hacia el fondo
+	var wing := Node3D.new()
+	wing.position = Vector3(0, 0, -block_d)
+	root.add_child(wing)
+	L._facade_box(wing, town, w - 1.2, 67.9 - block_d, 7.2, 2, 1, Color(0.72, 0.38, 0.26), 4)
+	for k in 6:
+		var ac := L._box(wing, Vector3(w * 0.5 - 0.45, 4.6 + (k % 2) * 2.2, -6.0 - k * 8.5), Vector3(0.5, 0.6, 0.9), _m(Color(0.86, 0.86, 0.84), 0.6))
+		ac.name = "aire"
+	# ---- vestíbulo
+	var counter := _m(Color(0.75, 0.73, 0.68), 0.5)
+	L._box(root, Vector3(5.6, 0.55, -3.0), Vector3(0.7, 1.1, 3.6), counter, true)
+	L._box(root, Vector3(5.6, 1.13, -3.0), Vector3(0.9, 0.06, 3.7), _m(Color(0.35, 0.25, 0.18), 0.5))
+	var sec := L._box(root, Vector3(7.0, 2.6, -1.2), Vector3(0.04, 0.35, 1.8), _m(Color(0.15, 0.3, 0.6), 0.5))
+	L._label(sec, "CONSERJERÍA", Vector3(-0.03, 0, 0), 40, Color.WHITE, 0.004, 0, Color.BLACK, Vector3(0, -PI * 0.5, 0))
+	# tablón de anuncios con papeles
+	var board := L._box(root, Vector3(-8.5, 1.6, -4.5), Vector3(0.05, 1.2, 2.4), _m(Color(0.55, 0.42, 0.28), 0.9))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	for k in 9:
+		L._box(board, Vector3(0.035, rng.randf_range(-0.4, 0.4), rng.randf_range(-1.0, 1.0)), Vector3(0.01, 0.3, 0.22),
+			_m(Color.from_hsv(rng.randf(), 0.25, 0.95), 0.9))
+	# vitrina de trofeos
+	L._box(root, Vector3(-8.4, 1.0, -7.2), Vector3(0.5, 2.0, 1.8), _m(Color(0.3, 0.22, 0.15), 0.6), true)
+	for k in 4:
+		L._cyl(root, Vector3(-8.25, 1.2 + (k % 2) * 0.5, -7.7 + k * 0.3), 0.05, 0.08, 0.25, _m(Color(0.95, 0.75, 0.2), 0.3, 1.0))
+	for bx in [-6.0, 3.0]:
+		L._box(root, Vector3(bx, 0.23, -4.2), Vector3(1.8, 0.45, 0.45), _m(Color(0.2, 0.45, 0.7), 0.6), true)
+	# fluorescentes (uno parpadea)
+	var tube := _m(Color(0.95, 0.97, 1.0), 0.5)
+	tube.emission_enabled = true
+	tube.emission = Color(0.9, 0.95, 1.0)
+	tube.emission_energy_multiplier = 2.0
+	for p in [Vector3(-4.0, 3.35, -3.0), Vector3(3.0, 3.35, -3.0), Vector3(-4.0, 3.35, -6.5), Vector3(3.0, 3.35, -6.5)]:
+		L._box(root, p, Vector3(1.4, 0.05, 0.12), tube)
+	_light(root, Vector3(-3.0, 3.0, -3.5), Color(0.85, 0.92, 1.0), 0.8, 8.0)
+	var fl := _light(root, Vector3(3.0, 3.0, -6.0), Color(0.85, 0.92, 1.0), 0.8, 8.0)
+	town.lamps.append({"light": fl, "base": 0.8, "mode": "dying", "speed": 12.0})
+	# el portal al tanatorio, al fondo del vestíbulo
+	var portal := Portal.new()
+	portal.master = true
+	portal.label_text = "TANATORIO"
+	portal.town = town
+	portal.name = "PortalInstituto"
+	root.add_child(portal)
+	portal.position = Vector3(-1.0, 0.0, -block_d + 1.1)
+	town.portal_instituto = portal
+
+
+# ---------------------------------------------------------------- CEIP Alejandro Rubio
+
+static func colegio(root: Node3D, town) -> void:
+	var w := 30.2
+	var d := 17.9
+	var h := 7.0
+	L._facade_box(root, town, w, d, h, 0, 1, Color(0.84, 0.76, 0.6), 6)
+	var stone := _soft(town, Color(0.62, 0.55, 0.45), 0.9, 1.2)
+	for x in [-w * 0.5 + 0.4, w * 0.5 - 0.4]:
+		L._box(root, Vector3(x, h * 0.5, 0.15), Vector3(1.0, h, 0.4), stone)
+	L._box(root, Vector3(0, 3.2, 0.12), Vector3(w, 0.25, 0.25), _m(Color(0.78, 0.7, 0.55), 0.8))
+	var plaque := L._box(root, Vector3(-6.0, 2.6, 0.2), Vector3(3.4, 0.5, 0.05), _m(Color(0.95, 0.95, 0.93), 0.6))
+	L._label(plaque, "CEIP Alejandro Rubio", Vector3(0, 0, 0.03), 44, Color(0.15, 0.25, 0.55), 0.0045)

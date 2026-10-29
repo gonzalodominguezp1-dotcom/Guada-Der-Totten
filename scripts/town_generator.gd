@@ -16,6 +16,7 @@ const BarChiqui = preload("res://scripts/bar_chiqui.gd")
 const Landmarks = preload("res://scripts/landmarks.gd")
 const Zones = preload("res://scripts/zones.gd")
 const Interiors = preload("res://scripts/interiors.gd")
+const Tanatorio = preload("res://scripts/tanatorio.gd")
 const STUCCO_COLORS := [
 	Color(0.88, 0.84, 0.74), Color(0.92, 0.90, 0.85), Color(0.86, 0.76, 0.56),
 	Color(0.90, 0.80, 0.60), Color(0.82, 0.78, 0.70), Color(0.94, 0.92, 0.88),
@@ -49,6 +50,9 @@ var zone_doors: Array = []
 var open_zones := {}
 var spawn_zones: Array = []  # zona de cada punto de aparición
 var landmark_nodes := {}     # nombre del prefab -> nodo
+var portal_instituto = null
+var tanatorio = null         # nivel aparte (tanatorio.gd)
+var tanatorio_data := {}
 
 var noise_tex: NoiseTexture2D
 var soft_noise: NoiseTexture2D   # ruido de poco contraste para materiales estándar
@@ -103,6 +107,9 @@ func build(json_path: String) -> void:
 		_compute_spawns()
 	else:
 		Zones.compute_spawns(self)
+	if not tanatorio_data.is_empty():
+		# nivel aparte, lejos del pueblo (se llega por el portal del instituto)
+		tanatorio = Tanatorio.create(self, tanatorio_data, Vector3(bounds.end.x + 700.0, 0.0, bounds.get_center().y))
 	_choose_player_start()
 	_build_lamps()
 	_bake_navigation()
@@ -189,13 +196,19 @@ func _load_json(path: String) -> void:
 	for p in data.get("playable", []):
 		playable.append({"zone": str(p["zone"]), "name": str(p["name"]), "points": _pts(p["points"]), "width": float(p["width"])})
 	for p in data.get("areas", []):
-		areas.append({"zone": str(p["zone"]), "name": str(p["name"]), "points": _pts(p["points"])})
+		var ar := {"zone": str(p["zone"]), "name": str(p["name"]), "points": _pts(p["points"])}
+		if p.get("fence", false):
+			ar["fence"] = true
+			ar["gates"] = Array(_pts(p.get("gates", [])))
+		areas.append(ar)
 	for p in data.get("zone_doors", []):
 		zone_doors_data.append({"zone": str(p["zone"]), "cost": int(p["cost"]), "label": str(p["label"]),
 			"pos": Vector2(p["pos"][0], p["pos"][1]), "dir": Vector2(p["dir"][0], p["dir"][1]), "width": float(p["width"])})
 	for p in data.get("plazuelas", []):
 		plazuelas.append({"points": _pts(p["points"]), "name": str(p["name"]),
 			"dir": Vector2(p["dir"][0], p["dir"][1]), "normal": Vector2(p["normal"][0], p["normal"][1])})
+	if data.get("tanatorio") is Dictionary:
+		tanatorio_data = data["tanatorio"]
 	for p in data.get("plazas", []):
 		plazas.append({"points": _pts(p["points"]), "name": str(p.get("name", ""))})
 	for p in data.get("prefabs", []):
@@ -815,6 +828,10 @@ func _build_prefabs() -> void:
 					Interiors.polideportivo(lm, self)
 				"ayuntamiento":
 					Interiors.ayuntamiento(lm, self)
+				"instituto":
+					Interiors.instituto(lm, self)
+				"colegio":
+					Interiors.colegio(lm, self)
 				_:
 					Landmarks.build(pf["prefab"], lm, self)
 

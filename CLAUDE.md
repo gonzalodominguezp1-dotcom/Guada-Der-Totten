@@ -5,7 +5,7 @@ Compatibilidad: el PC del usuario no aguanta Forward+). Todo el mundo se genera 
 arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en español neutro.
 
 - Mapa: `data/town.json`, generado desde `data/map.osm` con
-  `python3 tools/osm_to_json.py data/map.osm data/town.json --crop=-175,60,262,235 --start "Chiqui"`.
+  `python3 tools/osm_to_json.py data/map.osm data/map_sur.osm data/town.json --crop=-175,60,262,560 --start "Chiqui" --tanatorio data/tanatorio.osm`.
 - Bar Chiqui (zona de inicio = todo el bar, 15x22 m como en OSM): `scripts/bar_chiqui.gd`,
   coordenadas locales (+Z = avenida). Ventanas W1-W6 en el perímetro; se descartan solas si
   dan contra otra casa. Única salida: la verja (BuyDoor estilo "gate").
@@ -18,8 +18,15 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   Plaza Consistorial. Arma maravilla "zurraspa" (diseño de un colega del usuario): ráfaga
   de chorros que hace resbalar y ensucia (`apply_slip`/`apply_dirty` en zombie.gd) y deja charcos
   (`scripts/zurraspa_puddle.gd`). Versión Pack-a-Punch "zurraspa_pap": avalancha
-  (`scripts/zurraspa_wave.gd`) y Defecación Nuclear con [G]. Pack-a-Punch provisional en la
-  plaza (`scripts/pack_a_punch.gd`, mejora según la clave "pap" de weapons.gd).
+  (`scripts/zurraspa_wave.gd`) y Defecación Nuclear con [G]. Pack-a-Punch dentro del
+  tanatorio (`scripts/pack_a_punch.gd`, mejora según la clave "pap" de weapons.gd).
+- Zona "instituto": puerta en el callejón de la biblioteca (plaza trasera del poli) → Eras de
+  Abajo → glorieta → patio vallado del IES (áreas con "fence": valla verde y "gates"). Instituto
+  y colegio en interiors.gd; en el vestíbulo del instituto está el portal (`scripts/portal.gd`,
+  se enciende pagando y abre la zona "tanatorio").
+- Tanatorio: nivel aparte (`scripts/tanatorio.gd`, datos en la clave "tanatorio" de town.json)
+  a ~700 m al este del pueblo, con su propia navmesh. main.gd cambia niebla/luz y oculta el
+  pueblo al entrar. El cementerio NO se modela ni se puede visitar (petición del usuario).
 - Edificios a mano sin interior (Sala Groove nº 6) en `scripts/landmarks.gd`; su posición
   aproximada está en `EXTRA_PREFABS` de `tools/osm_to_json.py`. Plazuelas (acera ensanchada)
   delante de Casa de la Juventud y Hogar del Mayor.

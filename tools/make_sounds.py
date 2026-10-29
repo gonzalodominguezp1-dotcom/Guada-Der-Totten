@@ -369,6 +369,16 @@ def nuclear():
     return mix(at(brr, 0.0, d), boom, sub)
 
 
+def portal():
+    # zumbido que sube y "fuuum" del vórtice
+    d = 1.4
+    t = t_axis(d)
+    sweep = tone(lambda tt: 120 + 900 * (tt / d) ** 2, d, "saw") * np.sin(np.pi * t / d) * 0.25
+    swirl = bandpass(noise(d), 400, 3000) * np.sin(np.pi * t / d) * (0.6 + 0.4 * np.sin(t * 40)) * 0.9
+    sub = tone(55, d) * np.sin(np.pi * t / d) * 0.6
+    return mix(lowpass_fast(sweep, 3000), swirl, sub)
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "assets/sounds"
     os.makedirs(out, exist_ok=True)
@@ -400,6 +410,7 @@ def main():
         "zurraspa_spray": zurraspa_spray(),
         "avalanche": avalanche(),
         "nuclear": nuclear(),
+        "portal": portal(),
     }
     for i in range(6):
         sounds[f"zombie_moan_{i}"] = zombie_moan(10 + i, dur=1.4 + 0.3 * (i % 3), base=80 + 12 * i)

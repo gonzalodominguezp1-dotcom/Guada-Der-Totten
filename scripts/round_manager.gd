@@ -140,6 +140,22 @@ func on_zombie_died(z) -> void:
 		pu.global_position = Vector3(z.global_position.x, 1.0, z.global_position.z)
 
 
+## Tras cruzar un portal: los zombies que se quedaron al otro lado reaparecen
+## cerca del jugador (si no, la ronda se quedaría atascada).
+func relocate_zombies() -> void:
+	for z in get_tree().get_nodes_in_group("zombies"):
+		if z.dead or z.global_position.distance_to(player.global_position) < 150.0:
+			continue
+		var spot = _pick_spawn()
+		if spot == null or spot["barricade"] != null:
+			continue
+		z.global_position = spot["pos"] + Vector3(randf_range(-0.6, 0.6), 0.0, randf_range(-0.6, 0.6))
+		z.velocity = Vector3.ZERO
+		z.window = null
+		if z.state != z.State.RISING:
+			z.state = z.State.CHASE
+
+
 func kill_all() -> int:
 	var n := 0
 	for z in get_tree().get_nodes_in_group("zombies"):
