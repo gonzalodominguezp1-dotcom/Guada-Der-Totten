@@ -17,6 +17,8 @@ const Landmarks = preload("res://scripts/landmarks.gd")
 const Zones = preload("res://scripts/zones.gd")
 const Interiors = preload("res://scripts/interiors.gd")
 const Tanatorio = preload("res://scripts/tanatorio.gd")
+const Backdrop = preload("res://scripts/backdrop.gd")
+const Bus = preload("res://scripts/bus.gd")
 const STUCCO_COLORS := [
 	Color(0.88, 0.84, 0.74), Color(0.92, 0.90, 0.85), Color(0.86, 0.76, 0.56),
 	Color(0.90, 0.80, 0.60), Color(0.82, 0.78, 0.70), Color(0.94, 0.92, 0.88),
@@ -53,6 +55,9 @@ var landmark_nodes := {}     # nombre del prefab -> nodo
 var portal_instituto = null
 var tanatorio = null         # nivel aparte (tanatorio.gd)
 var tanatorio_data := {}
+var backdrop_data := {}
+var bus_route := PackedVector2Array()
+var bus = null
 
 var noise_tex: NoiseTexture2D
 var soft_noise: NoiseTexture2D   # ruido de poco contraste para materiales estándar
@@ -93,6 +98,8 @@ func build(json_path: String) -> void:
 
 	_find_stone_spot()
 	_build_ground()
+	if not backdrop_data.is_empty():
+		Backdrop.build(self, backdrop_data)
 	_build_plazas()
 	_build_streets()
 	_build_curbs()
@@ -103,6 +110,8 @@ func build(json_path: String) -> void:
 	_build_trees()
 	_build_boundary()
 	Zones.build(self)
+	if bus_route.size() > 1 and not playable.is_empty():
+		bus = Bus.create(self)
 	if playable.is_empty():
 		_compute_spawns()
 	else:
@@ -207,6 +216,9 @@ func _load_json(path: String) -> void:
 	for p in data.get("plazuelas", []):
 		plazuelas.append({"points": _pts(p["points"]), "name": str(p["name"]),
 			"dir": Vector2(p["dir"][0], p["dir"][1]), "normal": Vector2(p["normal"][0], p["normal"][1])})
+	if data.get("backdrop") is Dictionary:
+		backdrop_data = data["backdrop"]
+	bus_route = _pts(data.get("bus_route", []))
 	if data.get("tanatorio") is Dictionary:
 		tanatorio_data = data["tanatorio"]
 	for p in data.get("plazas", []):

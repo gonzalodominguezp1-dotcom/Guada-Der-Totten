@@ -45,7 +45,7 @@ modelo y animaciones de verdad.
 ## Cambiar el mapa
 
 ```
-python3 tools/osm_to_json.py data/map.osm data/map_sur.osm data/town.json --crop=-175,60,262,560 --start "Chiqui" --tanatorio data/tanatorio.osm
+python3 tools/osm_to_json.py data/map.osm data/map_sur.osm data/map_pueblo.osm data/town.json --crop=-175,60,262,560 --start "Chiqui" --tanatorio data/tanatorio.osm --backdrop=-1300,-450,900,980
 ```
 
 `--crop` recorta la zona (metros desde el centro de la exportación), `--start` elige el inicio,
@@ -65,6 +65,8 @@ scripts/workbench.gd        mesa de trabajo del Cañón de Zurraspa (+ part_pick
 scripts/zurraspa_*.gd       charcos y avalancha del Cañón de Zurraspa
 scripts/pack_a_punch.gd     máquina de mejora (en el tanatorio)
 scripts/portal.gd           portal instituto <-> tanatorio
+scripts/bus.gd              autobús 726 (avenida <-> instituto)
+scripts/backdrop.gd         resto del pueblo de fondo, entre la niebla
 scripts/tanatorio.gd        nivel del tanatorio (niebla, Pack-a-Punch)
 scripts/player.gd           jugador, armas, cuchillo, compras, perks, Quick Revive
 scripts/weapons.gd          datos y modelos de las armas

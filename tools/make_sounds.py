@@ -379,6 +379,15 @@ def portal():
     return mix(lowpass_fast(sweep, 3000), swirl, sub)
 
 
+def bus_horn():
+    # bocina de autobús: dos notas graves algo desafinadas
+    d = 0.9
+    t = t_axis(d)
+    env = np.clip(t / 0.03, 0, 1) * np.clip((d - t) / 0.1, 0, 1)
+    x = tone(311, d, "saw") * 0.5 + tone(370, d, "saw") * 0.4 + tone(155, d, "square") * 0.2
+    return lowpass_fast(x, 2200) * env
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "assets/sounds"
     os.makedirs(out, exist_ok=True)
@@ -411,6 +420,7 @@ def main():
         "avalanche": avalanche(),
         "nuclear": nuclear(),
         "portal": portal(),
+        "bus_horn": bus_horn(),
     }
     for i in range(6):
         sounds[f"zombie_moan_{i}"] = zombie_moan(10 + i, dur=1.4 + 0.3 * (i % 3), base=80 + 12 * i)

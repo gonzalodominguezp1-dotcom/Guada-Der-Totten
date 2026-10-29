@@ -128,9 +128,12 @@ static func _classify(town, s: Vector2, n: Vector2, own_pl: int, own_area: int) 
 		for d in [0.0, 0.6, 1.5]:
 			if town._in_any_building(s + n * d, 0.0):
 				return "open"
-		return "fence"
+		# valla verde solo en los lados que dan a la calle; el resto, tapia normal
+		for pl in town.playable:
+			if _dist_poly(s, pl["points"]) < pl["width"] * 0.5 + SIDEWALK + 6.0:
+				return "fence"
 	# junto a un recinto vallado: su valla ya cierra
-	if _near_fenced(town, s, 4.0):
+	if not (own_area >= 0 and town.areas[own_area].get("fence", false)) and _near_fenced(town, s, 4.0):
 		return "open"
 	# fachada o edificio detrás: no hace falta tapia
 	for d in [0.0, 0.6, 1.5, 2.6]:

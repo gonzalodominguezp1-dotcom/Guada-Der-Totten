@@ -488,6 +488,9 @@ func _physics_process(delta: float) -> void:
 	elif not player.downed and state == State.WANDER:
 		state = State.CHASE
 
+	if (state == State.TO_WINDOW or state == State.TEARING) and not is_instance_valid(window):
+		window = null
+		state = State.CHASE
 	match state:
 		State.TO_WINDOW:
 			# si el jugador ya no está dentro del bar, ir directamente a por él

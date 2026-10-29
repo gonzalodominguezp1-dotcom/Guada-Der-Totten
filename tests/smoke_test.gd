@@ -238,6 +238,10 @@ func _process(_delta: float) -> bool:
 		check(wb.built, "se monta el Cañón de Zurraspa")
 		wb.interact(p)
 		check(p.weapons.has("zurraspa"), "coger el Cañón de Zurraspa")
+		# a la plaza, mirando hacia el centro (lejos de paredes)
+		p.global_position = wb.global_transform * Vector3(0, 0.1, 3.0)
+		p.rotation.y = wb.global_rotation.y + PI
+		p.velocity = Vector3.ZERO
 		log_lines = [_test_zombie(p, 3.5, 0.0)]
 	if frame == 2710 + 200:
 		_aim_at(p, log_lines[0])
@@ -323,6 +327,27 @@ func _process(_delta: float) -> bool:
 			if not z.dead:
 				alive += 1
 		check(alive == 0, "la Defecación Nuclear mata a todos (vivos: %d)" % alive)
+		# autobús 726: va solo hasta el instituto (acelerado para la prueba)
+		check(t.bus != null, "hay autobús 726")
+		main.rounds.set_process(false)
+		t.bus.speed_mult = 8.0
+	if frame == 2710 + 1500:
+		check(t.bus.arrivals >= 1, "el autobús llega al instituto (%d llegadas, tramo %d)" % [t.bus.arrivals, t.bus.leg])
+		t.bus.speed_mult = 1.0
+		t.bus.state = t.bus.State.WAITING
+		t.bus.s = 0.0
+		t.bus.wait_t = 3.0
+		t.bus._place(0.0)
+	if frame == 2710 + 1520:
+		# un poco después: el cuerpo del bus ya se ha movido en la física
+		p.global_position = t.bus.body.to_global(Vector3(-0.3, 0.6, 2.2))
+		p.velocity = Vector3.ZERO
+		log_lines = [t.bus.body.global_position]
+	if frame == 2710 + 2100:
+		var lp: Vector3 = t.bus.body.to_local(p.global_position)
+		var moved: float = t.bus.body.global_position.distance_to(log_lines[0])
+		check(moved > 8.0 and absf(lp.x) < 1.4 and absf(lp.z) < 6.2 and lp.y > 0.0,
+			"se puede viajar de pie en el autobús (%.0f m recorridos, jugador en %s)" % [moved, str(lp.snappedf(0.1))])
 		print("RESULTADO: ", "OK" if ok else "FALLOS")
 		return true
 	return false

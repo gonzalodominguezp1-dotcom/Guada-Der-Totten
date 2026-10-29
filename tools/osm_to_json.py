@@ -220,6 +220,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+", help="uno o más .osm y, al final, el .json de salida")
     ap.add_argument("--tanatorio", help=".osm del tanatorio (nivel aparte, se llega por el portal)")
+    ap.add_argument("--backdrop", help="X0,Z0,X1,Z1: resto del pueblo, solo de fondo (bajo detalle, sin colisión)")
     ap.add_argument("--crop", help="X0,Z0,X1,Z1 en metros desde el centro de la exportación")
     ap.add_argument("--start", default="", help="nombre del lugar de inicio")
     ap.add_argument("--no-fill", action="store_true")
@@ -427,6 +428,11 @@ def main():
     }
     if args.tanatorio:
         out["tanatorio"] = tanatorio_json(args.tanatorio)
+    if args.backdrop:
+        out["backdrop"] = backdrop_json(ways, nodes, proj, rel, crop,
+                                        tuple(float(v) for v in args.backdrop.split(",")), rng)
+        print(f"Fondo: {len(out['backdrop']['buildings'])} casas, {len(out['backdrop']['streets'])} tramos de calle")
+    out["bus_route"] = [rel(p) for p in BUS_ROUTE]
     with open(args.dst, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False)
     print(f"{real_count} edificios de OSM + {len(buildings) - real_count} casas de relleno, "
@@ -469,7 +475,7 @@ PLAYABLE = [
     {"zone": "plaza", "street": "Calle Egido", "rect": [-1e9, -1e9, 1e9, 1e9]},
     # hacia el instituto: Eras de Abajo (desde el callejón de la biblioteca), Eras del
     # Medio, la glorieta, el vial del instituto y un trozo de Prado Panetes (colegio)
-    {"zone": "instituto", "street": "Calle Eras de Abajo", "rect": [-1e9, 186, 1e9, 382]},
+    {"zone": "instituto", "street": "Calle Eras de Abajo", "rect": [-1e9, 141, 1e9, 382]},
     {"zone": "instituto", "street": "Calle Eras del Medio", "rect": [-90, 370, -40, 420]},
     {"zone": "instituto", "way": "835855327", "rect": [-1e9, -1e9, 1e9, 1e9]},
     {"zone": "instituto", "way": "938579581", "rect": [-1e9, -1e9, 1e9, 1e9]},
@@ -507,6 +513,63 @@ NO_FILL_AREAS = [
     [[-30.2, 437.4], [10.9, 482.7], [67.7, 513.9], [60.5, 528.0], [50.0, 548.7], [46.3, 556.3], [37.0, 573.9],
      [25.7, 596.3], [-15.0, 570.2], [-47.7, 558.3], [-63.2, 543.6], [-49.0, 523.0], [-33.4, 511.8], [-62.7, 463.3]],
 ]
+
+
+# ------------------------------------------------------------------ fondo
+
+def backdrop_json(ways, nodes, proj, rel, crop, rect, rng):
+    """El resto del pueblo, fuera del recorte jugable: calles y casas (de OSM y
+    de relleno) para verlas de lejos entre la niebla. Sin colisión ni interiores."""
+    def outside(p):
+        return not (crop[0] - 2 <= p[0] <= crop[2] + 2 and crop[1] - 2 <= p[1] <= crop[3] + 2)
+
+    def inside_rect(p):
+        return rect[0] <= p[0] <= rect[2] and rect[1] <= p[1] <= rect[3]
+
+    streets, buildings = [], []
+    for wid, tags, refs in ways:
+        pts = [proj(*nodes[r]) for r in refs if r in nodes]
+        if len(pts) < 2:
+            continue
+        if tags.get("highway") in HIGHWAY_WIDTHS and tags["highway"] not in ("path", "footway", "steps", "track"):
+            # trocear en tramos de ~5 m y quedarse con los de fuera del recorte
+            run = []
+            for i in range(len(pts) - 1):
+                a, b = pts[i], pts[i + 1]
+                n = max(1, int(math.dist(a, b) / 5.0))
+                for k in range(n):
+                    p0 = [a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]
+                    p1 = [a[0] + (b[0] - a[0]) * (k + 1) / n, a[1] + (b[1] - a[1]) * (k + 1) / n]
+                    mid = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2]
+                    if outside(mid) and inside_rect(mid):
+                        if not run:
+                            run = [p0]
+                        run.append(p1)
+                    elif run:
+                        streets.append({"points": run, "width": HIGHWAY_WIDTHS[tags["highway"]], "type": tags["highway"], "name": ""})
+                        run = []
+            if run:
+                streets.append({"points": run, "width": HIGHWAY_WIDTHS[tags["highway"]], "type": tags["highway"], "name": ""})
+        elif "building" in tags and refs[0] == refs[-1] and len(refs) >= 4:
+            poly = pts[:-1]
+            c = centroid(poly)
+            if outside(c) and inside_rect(c):
+                buildings.append({"points": poly, "height": parse_height(tags, wid), "name": "", "type": "yes"})
+    crop_poly = [[crop[0], crop[1]], [crop[2], crop[1]], [crop[2], crop[3]], [crop[0], crop[3]]]
+    # casas solo en calles del casco (no en carreteras ni caminos de las afueras)
+    urban = [s_ for s_ in streets if s_["type"] in ("residential", "living_street", "pedestrian")]
+    fill_houses(buildings, urban, [], [], rect, rng, extra_obstacles=[crop_poly]
+                + [s_["points"] for s_ in streets if s_["type"] not in ("residential", "living_street", "pedestrian")])
+    out_b = [{"points": [rel(p) for p in b["points"]], "height": round(b["height"], 1)} for b in buildings]
+    out_s = [{"points": [rel(p) for p in s_["points"]], "width": s_["width"]} for s_ in streets]
+    return {"buildings": out_b, "streets": out_s, "rect": [rel([rect[0], rect[1]]), rel([rect[2], rect[3]])]}
+
+
+# Línea 726 (autobús interurbano verde): parada en la Av. Alejandro Rubio y en el
+# instituto, por Eras de Abajo, Eras del Medio, la glorieta y el vial del IES.
+BUS_ROUTE = [[-20, 135.8], [-33, 137], [-76, 141], [-71, 212], [-75, 249], [-70, 277], [-66, 308], [-64, 360],
+             [-65, 365], [-68, 369], [-84, 381], [-65, 403], [-55, 412], [-46, 413], [-47, 415], [-48, 418],
+             [-47, 420], [-43, 424], [-41, 426], [-52, 431], [-92, 453.5]]
 
 
 # ------------------------------------------------------------------ tanatorio

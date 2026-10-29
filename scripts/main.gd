@@ -86,8 +86,9 @@ func _process(delta: float) -> void:
 ## solo se dibuja ese nivel (y al volver, al revés).
 func set_tanatorio_mood(on: bool) -> void:
 	in_tanatorio = on
-	town.nav_region.visible = not on
-	town.tanatorio.visible = on
+	for c in town.get_children():
+		if c is Node3D:
+			c.visible = (c == town.tanatorio) == on
 	if mood_tween:
 		mood_tween.kill()
 	mood_tween = create_tween().set_parallel(true)

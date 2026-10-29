@@ -5,7 +5,7 @@ Compatibilidad: el PC del usuario no aguanta Forward+). Todo el mundo se genera 
 arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en español neutro.
 
 - Mapa: `data/town.json`, generado desde `data/map.osm` con
-  `python3 tools/osm_to_json.py data/map.osm data/map_sur.osm data/town.json --crop=-175,60,262,560 --start "Chiqui" --tanatorio data/tanatorio.osm`.
+  `python3 tools/osm_to_json.py data/map.osm data/map_sur.osm data/map_pueblo.osm data/town.json --crop=-175,60,262,560 --start "Chiqui" --tanatorio data/tanatorio.osm --backdrop=-1300,-450,900,980`.
 - Bar Chiqui (zona de inicio = todo el bar, 15x22 m como en OSM): `scripts/bar_chiqui.gd`,
   coordenadas locales (+Z = avenida). Ventanas W1-W6 en el perímetro; se descartan solas si
   dan contra otra casa. Única salida: la verja (BuyDoor estilo "gate").
@@ -27,6 +27,11 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
 - Tanatorio: nivel aparte (`scripts/tanatorio.gd`, datos en la clave "tanatorio" de town.json)
   a ~700 m al este del pueblo, con su propia navmesh. main.gd cambia niebla/luz y oculta el
   pueblo al entrar. El cementerio NO se modela ni se puede visitar (petición del usuario).
+- Resto del pueblo de fondo (`scripts/backdrop.gd`, clave "backdrop"): casas y calles sencillas
+  fuera del recorte, fusionadas por bloques de 100 m, sin colisión, visibility_range 300 m.
+- Autobús 726 (`scripts/bus.gd`, ruta "bus_route"/BUS_ROUTE del conversor): AnimatableBody3D en
+  capa 16, avenida ↔ instituto por Eras de Abajo; barrera "SOLO BUS" que solo se abre a su paso.
+  Llegar al instituto en bus abre la zona "instituto". Siguientes paradas: norte, este, suroeste.
 - Edificios a mano sin interior (Sala Groove nº 6) en `scripts/landmarks.gd`; su posición
   aproximada está en `EXTRA_PREFABS` de `tools/osm_to_json.py`. Plazuelas (acera ensanchada)
   delante de Casa de la Juventud y Hogar del Mayor.
