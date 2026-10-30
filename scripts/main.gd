@@ -36,6 +36,8 @@ func _ready() -> void:
 		wb.game = self
 	for pt in get_tree().get_nodes_in_group("portals"):
 		pt.game = self
+	for b in get_tree().get_nodes_in_group("bus"):
+		b.game = self
 	if town.tanatorio:
 		town.tanatorio.visible = false
 

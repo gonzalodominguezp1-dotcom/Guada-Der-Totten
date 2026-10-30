@@ -29,9 +29,16 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   pueblo al entrar. El cementerio NO se modela ni se puede visitar (petición del usuario).
 - Resto del pueblo de fondo (`scripts/backdrop.gd`, clave "backdrop"): casas y calles sencillas
   fuera del recorte, fusionadas por bloques de 100 m, sin colisión, visibility_range 300 m.
-- Autobús 726 (`scripts/bus.gd`, ruta "bus_route"/BUS_ROUTE del conversor): AnimatableBody3D en
-  capa 16, avenida ↔ instituto por Eras de Abajo; barrera "SOLO BUS" que solo se abre a su paso.
-  Llegar al instituto en bus abre la zona "instituto". Siguientes paradas: norte, este, suroeste.
+- Autobús 726 (`scripts/bus.gd`): línea circular con 5 paradas (BUS_STOPS del conversor:
+  avenida, instituto, suroeste/Calle Hadar, norte/Calle Encinas, este/Av. Virgen del Espinar).
+  Ruta = BUS_ROUTE a mano (avenida→instituto) + camino más corto por OSM entre paradas.
+  AnimatableBody3D en capa 16; en marcha el viajero solo choca con el bus (collision_mask=16) y
+  atraviesa tapias/barreras con él. Donde la ruta corta tapones o escombros se pone una barrera
+  "SOLO BUS" (Bus.make_gate). Llegar a una parada abre su zona.
+- Paradas nuevas = "islands" de town.json: recuadros con detalle fuera del recorte principal
+  (calles jugables, casas, suelo, límites y su propia navmesh horneada con NavigationServer3D).
+  `town.in_detail(p)` sustituye a `bounds.has_point` en zonas, farolas y spawns.
+  La navmesh grande tarda unos segundos en estar lista (los tests esperan a `_main_nav_ready`).
 - Edificios a mano sin interior (Sala Groove nº 6) en `scripts/landmarks.gd`; su posición
   aproximada está en `EXTRA_PREFABS` de `tools/osm_to_json.py`. Plazuelas (acera ensanchada)
   delante de Casa de la Juventud y Hogar del Mayor.

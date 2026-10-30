@@ -25,7 +25,7 @@ const STUCCO_COLORS := [
 	Color(0.88, 0.77, 0.50), Color(0.85, 0.72, 0.47),
 ]
 const NO_FURNITURE := ["track", "path", "footway", "steps"]
-const MAX_LAMPS := 46
+const MAX_LAMPS := 64
 const GROUND_TILE := 16.0
 
 enum Kind { STUCCO, GRANITE, BRICK, PLAIN_STONE }
@@ -58,6 +58,10 @@ var tanatorio_data := {}
 var backdrop_data := {}
 var bus_route := PackedVector2Array()
 var bus = null
+var bus_stops: Array = []
+var bus_gates_data: Array = []
+var bus_gates: Array = []        # barreras construidas {arm, pos}
+var islands: Array = []          # zonas con detalle fuera del recorte principal {zone, rect}
 
 var noise_tex: NoiseTexture2D
 var soft_noise: NoiseTexture2D   # ruido de poco contraste para materiales estándar
@@ -118,7 +122,7 @@ func build(json_path: String) -> void:
 		Zones.compute_spawns(self)
 	if not tanatorio_data.is_empty():
 		# nivel aparte, lejos del pueblo (se llega por el portal del instituto)
-		tanatorio = Tanatorio.create(self, tanatorio_data, Vector3(bounds.end.x + 700.0, 0.0, bounds.get_center().y))
+		tanatorio = Tanatorio.create(self, tanatorio_data, Vector3(bounds.end.x + 2500.0, 0.0, bounds.get_center().y))
 	_choose_player_start()
 	_build_lamps()
 	_bake_navigation()
@@ -219,6 +223,13 @@ func _load_json(path: String) -> void:
 	if data.get("backdrop") is Dictionary:
 		backdrop_data = data["backdrop"]
 	bus_route = _pts(data.get("bus_route", []))
+	bus_stops = data.get("bus_stops", [])
+	for g in data.get("bus_gates", []):
+		bus_gates_data.append({"pos": Vector2(g["pos"][0], g["pos"][1]), "dir": Vector2(g["dir"][0], g["dir"][1])})
+	for il in data.get("islands", []):
+		var a := Vector2(il["rect"][0][0], il["rect"][0][1])
+		var b := Vector2(il["rect"][1][0], il["rect"][1][1])
+		islands.append({"zone": str(il["zone"]), "rect": Rect2(a, b - a)})
 	if data.get("tanatorio") is Dictionary:
 		tanatorio_data = data["tanatorio"]
 	for p in data.get("plazas", []):
@@ -420,6 +431,16 @@ func _build_ground() -> void:
 	var body := StaticBody3D.new()
 	body.name = "Suelo"
 	nav_region.add_child(body)
+	# zonas de las paradas nuevas: su propio suelo
+	for il in islands:
+		var ar: Rect2 = il["rect"].grow(10.0)
+		var ics := CollisionShape3D.new()
+		var ibox := BoxShape3D.new()
+		ibox.size = Vector3(ar.size.x, 1.0, ar.size.y)
+		ics.shape = ibox
+		ics.position = Vector3(ar.get_center().x, -0.5, ar.get_center().y)
+		body.add_child(ics)
+		_ground_tiles(ar)
 	var area := bounds.grow(30.0)
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -427,7 +448,11 @@ func _build_ground() -> void:
 	cs.shape = box
 	cs.position = Vector3(area.get_center().x, -0.5, area.get_center().y)
 	body.add_child(cs)
-	# Suelo troceado: el renderizador de Compatibilidad limita las luces por objeto
+	_ground_tiles(area)
+
+
+## Suelo troceado: el renderizador de Compatibilidad limita las luces por objeto
+func _ground_tiles(area: Rect2) -> void:
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(GROUND_TILE, GROUND_TILE)
 	var holder := Node3D.new()
@@ -929,8 +954,18 @@ func _in_plazuela(p: Vector2) -> bool:
 	return false
 
 
+## ¿Está el punto dentro de alguna zona con detalle (recorte principal o paradas nuevas)?
+func in_detail(p: Vector2, grow := 0.0) -> bool:
+	if bounds.grow(grow).has_point(p):
+		return true
+	for il in islands:
+		if il["rect"].grow(grow).has_point(p):
+			return true
+	return false
+
+
 func _spot_free(p: Vector2, pad: float, s = null) -> bool:
-	if not bounds.grow(-2.0).has_point(p):
+	if not in_detail(p, -2.0):
 		return false
 	if _in_plazuela(p):
 		return false
@@ -1111,10 +1146,15 @@ func _tree_mesh() -> Mesh:
 
 
 func _build_boundary() -> void:
+	_boundary_walls(bounds)
+	for il in islands:
+		_boundary_walls(il["rect"])
+
+
+func _boundary_walls(r: Rect2) -> void:
 	var body := StaticBody3D.new()
 	body.name = "LimiteMapa"
 	nav_region.add_child(body)
-	var r := bounds
 	var c := r.get_center()
 	var walls := [
 		[Vector3(c.x, 3, r.position.y), Vector3(r.size.x + 2, 6, 1)],
@@ -1228,7 +1268,7 @@ func _build_lamps() -> void:
 	for p in candidates:
 		if lamps.size() >= MAX_LAMPS:
 			break
-		if not bounds.grow(-2.0).has_point(p) or _in_any_building(p, 0.3):
+		if not in_detail(p, -2.0) or _in_any_building(p, 0.3):
 			continue
 		var too_close := false
 		for q in placed:
@@ -1272,6 +1312,9 @@ func _build_lamps() -> void:
 		light.omni_attenuation = 1.1
 		light.light_volumetric_fog_energy = 1.6
 		light.shadow_enabled = lamps.size() < 6
+		light.distance_fade_enabled = true
+		light.distance_fade_begin = 70.0
+		light.distance_fade_length = 20.0
 		lamp.add_child(light)
 		lamps.append({"light": light, "base": light.light_energy, "mode": mode,
 			"speed": rng.randf_range(9.0, 23.0)})
@@ -1329,6 +1372,20 @@ func _bake_navigation() -> void:
 	# Sólo hasta 2.6 m de altura: así no se generan zonas en tejados ni terrazas
 	nm.filter_baking_aabb = AABB(Vector3(bounds.position.x, -1.5, bounds.position.y),
 		Vector3(bounds.size.x, 4.1, bounds.size.y))
+	# zonas de las paradas nuevas: cada una con su trozo de navmesh (antes que el principal)
+	if not islands.is_empty():
+		var pnm: NavigationMesh = nm.duplicate()
+		var sgd := NavigationMeshSourceGeometryData3D.new()
+		NavigationServer3D.parse_source_geometry_data(pnm, sgd, nav_region)
+		for il in islands:
+			var r: Rect2 = il["rect"]
+			var inm: NavigationMesh = pnm.duplicate()
+			inm.filter_baking_aabb = AABB(Vector3(r.position.x, -1.5, r.position.y), Vector3(r.size.x, 4.1, r.size.y))
+			NavigationServer3D.bake_from_source_geometry_data(inm, sgd)
+			var reg := NavigationRegion3D.new()
+			reg.name = "Navegacion_" + str(il["zone"])
+			reg.navigation_mesh = inm
+			add_child(reg)
 	nav_region.navigation_mesh = nm
 	_baking = true
 	nav_region.bake_navigation_mesh(false)

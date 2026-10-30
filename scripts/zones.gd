@@ -7,6 +7,7 @@ extends RefCounted
 ## Los datos vienen de town.json (claves "playable", "areas", "zone_doors").
 
 const BuyDoor = preload("res://scripts/buy_door.gd")
+const Bus = preload("res://scripts/bus.gd")
 const SIDEWALK := 1.6      # de la calzada a la línea de tapias
 const STEP := 0.75
 
@@ -65,10 +66,14 @@ static func build(town) -> void:
 			var dir: Vector2 = (e[0] - e[1]).normalized()
 			if _near_playable(town, p, pi, 1.5) or _in_area(town, p, 2.0):
 				continue
-			if not town.bounds.grow(-1.0).has_point(p):
+			if not town.in_detail(p, -1.0):
 				continue
 			var w: float = pl["width"] + SIDEWALK * 2.0
-			_rubble(town, holder, rng, p + dir * 1.0, Vector2(-dir.y, dir.x), w + 0.6)
+			if _near_route(town, p, 7.0):
+				# por aquí sale el autobús: barrera en vez de escombros
+				Bus.make_gate(town, p + dir * 1.0, dir, w + 0.6)
+			else:
+				_rubble(town, holder, rng, p + dir * 1.0, Vector2(-dir.y, dir.x), w + 0.6)
 	# 4) escombros que se compran entre zonas
 	for zd in town.zone_doors_data:
 		var door := BuyDoor.new()
@@ -112,13 +117,15 @@ static func _line(town, holder: Node3D, rng: RandomNumberGenerator, start: Vecto
 			var b := start + dir * tb
 			if k == "wall":
 				_tapia(town, holder, rng, a, b)
+			elif _near_route(town, (a + b) * 0.5, 5.0):
+				Bus.make_gate(town, (a + b) * 0.5, Vector2(-dir.y, dir.x), tb - ta + 0.8)
 			else:
 				_rubble(town, holder, rng, (a + b) * 0.5, dir, tb - ta + 0.8)
 		i = j + 1
 
 
 static func _classify(town, s: Vector2, n: Vector2, own_pl: int, own_area: int) -> String:
-	if not town.bounds.grow(-0.5).has_point(s):
+	if not town.in_detail(s, -0.5):
 		return "open"
 	# recinto vallado (colegio, instituto): valla verde salvo en las puertas
 	if own_area >= 0 and town.areas[own_area].get("fence", false):
@@ -152,6 +159,17 @@ static func _classify(town, s: Vector2, n: Vector2, own_pl: int, own_area: int) 
 		if _dist_poly(s, st["points"]) < st["width"] * 0.5 + 0.6:
 			return "rubble"
 	return "wall"
+
+
+## ¿Pasa la ruta del autobús cerca de este punto?
+static func _near_route(town, p: Vector2, dist: float) -> bool:
+	var r: PackedVector2Array = town.bus_route
+	for i in r.size() - 1:
+		if absf(r[i].x - p.x) > 60.0 and absf(r[i + 1].x - p.x) > 60.0:
+			continue
+		if Geometry2D.get_closest_point_to_segment(p, r[i], r[i + 1]).distance_to(p) < dist:
+			return true
+	return false
 
 
 static func _near_fenced(town, p: Vector2, dist: float) -> bool:
@@ -404,6 +422,7 @@ static func _b(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> Me
 
 static func compute_spawns(town) -> void:
 	var inner: Rect2 = town.bounds.grow(-3.0)
+	var ok_point := func(p: Vector2) -> bool: return town.in_detail(p, -3.0)
 	for pl in town.playable:
 		var pts: PackedVector2Array = pl["points"]
 		for i in pts.size() - 1:
@@ -412,7 +431,7 @@ static func compute_spawns(town) -> void:
 			var steps := maxi(int(a.distance_to(b) / 7.0), 1)
 			for j in steps + 1:
 				var p := a.lerp(b, float(j) / steps)
-				if inner.has_point(p) and not town._in_any_building(p, 0.9):
+				if ok_point.call(p) and not town._in_any_building(p, 0.9):
 					town.spawn_points.append(Vector3(p.x, 0.05, p.y))
 					town.spawn_zones.append(pl["zone"])
 	for ar in town.areas:

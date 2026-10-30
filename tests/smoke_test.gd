@@ -9,6 +9,7 @@ var main
 var frame := 0
 var ok := true
 var log_lines: Array = []
+var nav_checked := false
 
 
 func _initialize() -> void:
@@ -59,6 +60,13 @@ func _aim_at(p, z) -> void:
 	p.head.rotation.x = atan2(target.y - (p.global_position.y + 1.65), Vector2(to.x, to.z).length())
 
 
+## La navmesh grande tarda un poco en estar lista (se monta en otro hilo)
+func _main_nav_ready(t) -> bool:
+	var map: RID = t.nav_region.get_navigation_map()
+	var a: Vector3 = t.bar.to_global(Vector3(5.0, 0, -6.0))
+	return NavigationServer3D.map_get_closest_point(map, a).distance_to(a) < 1.0
+
+
 func find_interactable(script_name: String):
 	for it in get_nodes_in_group("interactables"):
 		if it.get_script().resource_path.ends_with(script_name):
@@ -84,7 +92,8 @@ func _process(_delta: float) -> bool:
 			check(t.bar.barricades.size() >= 3, "al menos 3 ventanas con barricada")
 			check(t.bar.is_inside_interior(p.global_position), "el jugador empieza dentro del bar")
 			check(not t.exterior_open, "la calle empieza cerrada")
-	if frame == 450:
+	if not nav_checked and frame >= 450 and _main_nav_ready(t):
+		nav_checked = true
 		var map: RID = t.nav_region.get_navigation_map()
 		var a: Vector3 = t.bar.to_global(Vector3(5.0, 0, -6.0))
 		var b: Vector3 = t.bar.to_global(Vector3(5.0, 0, -20.0))
@@ -327,23 +336,44 @@ func _process(_delta: float) -> bool:
 			if not z.dead:
 				alive += 1
 		check(alive == 0, "la Defecación Nuclear mata a todos (vivos: %d)" % alive)
-		# autobús 726: va solo hasta el instituto (acelerado para la prueba)
+		# autobús 726: una vuelta entera al pueblo (acelerado para la prueba)
 		check(t.bus != null, "hay autobús 726")
 		main.rounds.set_process(false)
-		t.bus.speed_mult = 8.0
-	if frame == 2710 + 1500:
-		check(t.bus.arrivals >= 1, "el autobús llega al instituto (%d llegadas, tramo %d)" % [t.bus.arrivals, t.bus.leg])
+		t.bus.speed_mult = 20.0
+	if frame == 2710 + 2700:
+		var zones := ["instituto", "suroeste", "norte", "este", "avenida"]
+		var missing := []
+		for z in zones:
+			if not t.bus.visited.has(z):
+				missing.append(z)
+		check(missing.is_empty(), "el autobús para en las 5 paradas (faltan: %s)" % str(missing))
+		for z in ["suroeste", "norte", "este"]:
+			check(t.zone_open(z), "llegar en bus abre la zona '%s'" % z)
+		# navegación en las zonas nuevas: de la marquesina a algún punto de aparición
+		var map: RID = t.nav_region.get_navigation_map()
+		for z in ["suroeste", "norte", "este"]:
+			var shelter: Node3D = t.nav_region.get_node_or_null("Parada_" + z)
+			var ok_nav := false
+			if shelter:
+				var from: Vector3 = shelter.global_transform * Vector3(-1.5, 0, 0)
+				for i in t.spawn_points.size():
+					if t.spawn_zones[i] != z:
+						continue
+					var goal: Vector3 = t.spawn_points[i]
+					var pth := NavigationServer3D.map_get_path(map, from, goal, true)
+					if pth.size() > 1 and pth[pth.size() - 1].distance_to(goal) < 1.0 and goal.distance_to(from) > 8.0:
+						ok_nav = true
+						break
+			check(ok_nav, "los zombies pueden andar por la zona '%s'" % z)
+		# viaje de verdad: el jugador de pie dentro, a velocidad normal
 		t.bus.speed_mult = 1.0
 		t.bus.state = t.bus.State.WAITING
-		t.bus.s = 0.0
 		t.bus.wait_t = 3.0
-		t.bus._place(0.0)
-	if frame == 2710 + 1520:
-		# un poco después: el cuerpo del bus ya se ha movido en la física
+	if frame == 2710 + 2720:
 		p.global_position = t.bus.body.to_global(Vector3(-0.3, 0.6, 2.2))
 		p.velocity = Vector3.ZERO
 		log_lines = [t.bus.body.global_position]
-	if frame == 2710 + 2100:
+	if frame == 2710 + 3200:
 		var lp: Vector3 = t.bus.body.to_local(p.global_position)
 		var moved: float = t.bus.body.global_position.distance_to(log_lines[0])
 		check(moved > 8.0 and absf(lp.x) < 1.4 and absf(lp.z) < 6.2 and lp.y > 0.0,

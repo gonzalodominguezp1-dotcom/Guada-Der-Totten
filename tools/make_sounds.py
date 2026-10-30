@@ -388,6 +388,35 @@ def bus_horn():
     return lowpass_fast(x, 2200) * env
 
 
+def bus_engine():
+    # motor diésel al ralentí (bucle de 2 s): golpes graves de los cilindros + traqueteo
+    d = 2.0
+    t = t_axis(d)
+    fire = 0.5 + 0.5 * np.sin(2 * np.pi * 26 * t)
+    rumble = lowpass_fast(noise(d), 180) * (0.6 + 0.6 * fire ** 4) * 2.5
+    tone_ = tone(52, d, "saw") * 0.25 + tone(104, d) * 0.15
+    rattle = bandpass(noise(d), 900, 2500) * 0.08
+    return mix(rumble, lowpass_fast(tone_, 400), rattle)
+
+
+def bus_doors():
+    # puertas neumáticas: soplido + golpe
+    d = 1.0
+    t = t_axis(d)
+    hiss = highpass(noise(d), 2500) * np.exp(-t * 4.0) * 0.8
+    thump = lowpass_fast(noise(d), 200) * np.exp(-np.maximum(t - 0.55, 0) * 18) * (t > 0.55) * 2.0
+    return mix(hiss, thump)
+
+
+def bus_chime():
+    # "ding-dong" de parada solicitada
+    d = 1.4
+    out = np.zeros(int(SR * d))
+    for i, f in enumerate((988, 784)):
+        out += at((tone(f, 1.0) + 0.3 * tone(f * 2, 1.0)) * env_exp(1.0, 0.35) * 0.5, i * 0.35, d)
+    return out
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "assets/sounds"
     os.makedirs(out, exist_ok=True)
@@ -421,6 +450,9 @@ def main():
         "nuclear": nuclear(),
         "portal": portal(),
         "bus_horn": bus_horn(),
+        "bus_engine": bus_engine(),
+        "bus_doors": bus_doors(),
+        "bus_chime": bus_chime(),
     }
     for i in range(6):
         sounds[f"zombie_moan_{i}"] = zombie_moan(10 + i, dur=1.4 + 0.3 * (i % 3), base=80 + 12 * i)

@@ -246,8 +246,12 @@ def main():
     def rel(p):
         return [round(p[0] - ox, 2), round(p[1] - oz, 2)]
 
+    islands = [(st["zone"], (st["pos"][0] - ISLAND_HALF, st["pos"][1] - ISLAND_HALF,
+                             st["pos"][0] + ISLAND_HALF, st["pos"][1] + ISLAND_HALF)) for st in BUS_STOPS if st.get("island")]
+    detail_rects = [crop] + [r for _z, r in islands]
+
     def in_crop(p, margin=0.0):
-        return crop[0] - margin <= p[0] <= crop[2] + margin and crop[1] - margin <= p[1] <= crop[3] + margin
+        return any(r[0] - margin <= p[0] <= r[2] + margin and r[1] - margin <= p[1] <= r[3] + margin for r in detail_rects)
 
     buildings, streets, pois, plazas, prefabs = [], [], [], [], []
     for wid, tags, refs in ways:
@@ -275,7 +279,8 @@ def main():
                 pois.append({"name": name, "type": next((tags[k] for k in POI_KEYS if k in tags), btype),
                              "pos": rel(c)})
         elif tags.get("highway") in HIGHWAY_WIDTHS and not (closed and tags.get("area") == "yes"):
-            for part in clip_polyline(pts, (crop[0] - 30, crop[1] - 30, crop[2] + 30, crop[3] + 30)):
+            for rr in detail_rects:
+              for part in clip_polyline(pts, (rr[0] - 30, rr[1] - 30, rr[2] + 30, rr[3] + 30)):
                 streets.append({"points": [rel(p) for p in part], "width": HIGHWAY_WIDTHS[tags["highway"]],
                                 "name": tags.get("name", ""), "type": tags["highway"]})
         elif tags.get("place") == "square" or (closed and tags.get("highway") == "pedestrian"):
@@ -353,6 +358,26 @@ def main():
                 for pp in part:
                     playable.append({"zone": pl["zone"], "name": pl.get("street", tags.get("name", "")),
                                      "points": [rel(p) for p in pp], "width": HIGHWAY_WIDTHS[tags["highway"]]})
+    # zonas de las paradas nuevas: todas las calles cerca de la parada y el
+    # propio recorrido del autobús (para que la parada quede dentro de la zona)
+    route, stops = bus_loop(ways, nodes, proj)
+    for zone, rr in islands:
+        st_pos = next(st["pos"] for st in BUS_STOPS if st["zone"] == zone)
+        inner = (st_pos[0] - ISLAND_PLAY, st_pos[1] - ISLAND_PLAY, st_pos[0] + ISLAND_PLAY, st_pos[1] + ISLAND_PLAY)
+        for part in clip_polyline(route, inner):
+            if len(part) >= 2:
+                playable.append({"zone": zone, "name": "Ruta 726", "points": [rel(p) for p in part], "width": 6.0})
+    for zone, rr in islands:
+        st_pos = next(st["pos"] for st in BUS_STOPS if st["zone"] == zone)
+        inner = (st_pos[0] - ISLAND_PLAY, st_pos[1] - ISLAND_PLAY, st_pos[0] + ISLAND_PLAY, st_pos[1] + ISLAND_PLAY)
+        for wid, tags, refs in ways:
+            if tags.get("highway") not in ("residential", "living_street", "unclassified", "tertiary", "secondary", "pedestrian"):
+                continue
+            pts = [proj(*nodes[r]) for r in refs if r in nodes]
+            for part in clip_polyline(pts, inner):
+                if len(part) >= 2 and sum(math.dist(part[i], part[i + 1]) for i in range(len(part) - 1)) > 4.0:
+                    playable.append({"zone": zone, "name": tags.get("name", ""), "points": [rel(p) for p in part],
+                                     "width": HIGHWAY_WIDTHS[tags["highway"]]})
     areas = []
     for pz in plazuelas:
         areas.append({"zone": "avenida", "name": pz["name"], "points": pz["points"]})
@@ -392,7 +417,7 @@ def main():
 
     real_count = len(buildings)
     if not args.no_fill:
-        fill_houses(buildings, streets, plazas, pois, (crop[0] - ox, crop[1] - oz, crop[2] - ox, crop[3] - oz), rng,
+        fill_houses(buildings, streets, plazas, pois, [(r[0] - ox, r[1] - oz, r[2] - ox, r[3] - oz) for r in detail_rects], rng,
                     extra_obstacles=[pf["footprint"] for pf in prefabs] + [a["points"] for a in areas]
                     + [[rel(p) for p in poly] for poly in NO_FILL_AREAS],
                     near=[pl["points"] for pl in playable] + [a["points"] + a["points"][:1] for a in areas])
@@ -429,10 +454,14 @@ def main():
     if args.tanatorio:
         out["tanatorio"] = tanatorio_json(args.tanatorio)
     if args.backdrop:
-        out["backdrop"] = backdrop_json(ways, nodes, proj, rel, crop,
+        out["backdrop"] = backdrop_json(ways, nodes, proj, rel, detail_rects,
                                         tuple(float(v) for v in args.backdrop.split(",")), rng)
         print(f"Fondo: {len(out['backdrop']['buildings'])} casas, {len(out['backdrop']['streets'])} tramos de calle")
-    out["bus_route"] = [rel(p) for p in BUS_ROUTE]
+    out["islands"] = [{"zone": z, "rect": [rel([r[0], r[1]]), rel([r[2], r[3]])]} for z, r in islands]
+    out["bus_route"] = [rel(p) for p in route]
+    out["bus_stops"] = stops
+    out["bus_gates"] = [{"pos": rel(g["pos"]), "dir": g["dir"]} for g in BUS_GATES]
+    print(f"Línea 726: {len(stops)} paradas, {stops[-1]['s'] if stops else 0:.0f} m hasta la última")
     with open(args.dst, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False)
     print(f"{real_count} edificios de OSM + {len(buildings) - real_count} casas de relleno, "
@@ -517,11 +546,11 @@ NO_FILL_AREAS = [
 
 # ------------------------------------------------------------------ fondo
 
-def backdrop_json(ways, nodes, proj, rel, crop, rect, rng):
+def backdrop_json(ways, nodes, proj, rel, rects_in, rect, rng):
     """El resto del pueblo, fuera del recorte jugable: calles y casas (de OSM y
     de relleno) para verlas de lejos entre la niebla. Sin colisión ni interiores."""
     def outside(p):
-        return not (crop[0] - 2 <= p[0] <= crop[2] + 2 and crop[1] - 2 <= p[1] <= crop[3] + 2)
+        return not any(c[0] - 2 <= p[0] <= c[2] + 2 and c[1] - 2 <= p[1] <= c[3] + 2 for c in rects_in)
 
     def inside_rect(p):
         return rect[0] <= p[0] <= rect[2] and rect[1] <= p[1] <= rect[3]
@@ -555,14 +584,105 @@ def backdrop_json(ways, nodes, proj, rel, crop, rect, rng):
             c = centroid(poly)
             if outside(c) and inside_rect(c):
                 buildings.append({"points": poly, "height": parse_height(tags, wid), "name": "", "type": "yes"})
-    crop_poly = [[crop[0], crop[1]], [crop[2], crop[1]], [crop[2], crop[3]], [crop[0], crop[3]]]
+    crop_polys = [[[c[0], c[1]], [c[2], c[1]], [c[2], c[3]], [c[0], c[3]]] for c in rects_in]
     # casas solo en calles del casco (no en carreteras ni caminos de las afueras)
     urban = [s_ for s_ in streets if s_["type"] in ("residential", "living_street", "pedestrian")]
-    fill_houses(buildings, urban, [], [], rect, rng, extra_obstacles=[crop_poly]
+    fill_houses(buildings, urban, [], [], rect, rng, extra_obstacles=crop_polys
                 + [s_["points"] for s_ in streets if s_["type"] not in ("residential", "living_street", "pedestrian")])
     out_b = [{"points": [rel(p) for p in b["points"]], "height": round(b["height"], 1)} for b in buildings]
     out_s = [{"points": [rel(p) for p in s_["points"]], "width": s_["width"]} for s_ in streets]
     return {"buildings": out_b, "streets": out_s, "rect": [rel([rect[0], rect[1]]), rel([rect[2], rect[3]])]}
+
+
+# Paradas de la línea 726 (coordenadas de la exportación). Las que llevan
+# "island" son zonas jugables nuevas alrededor de la parada.
+BUS_STOPS = [
+    {"name": "Av. Alejandro Rubio", "zone": "avenida", "pos": [-20, 135.8]},
+    {"name": "Instituto", "zone": "instituto", "pos": [-92, 453.5]},
+    {"name": "Calle Hadar", "zone": "suroeste", "pos": [-940, 660], "island": True},
+    {"name": "Calle Encinas", "zone": "norte", "pos": [30, -100], "island": True},
+    {"name": "Av. Virgen del Espinar", "zone": "este", "pos": [760, 140], "island": True},
+]
+ISLAND_HALF = 85.0     # mitad del lado del recuadro con detalle de cada parada nueva
+ISLAND_PLAY = 55.0     # calles jugables alrededor de la parada
+# Barrera "SOLO BUS" en Eras de Abajo, junto a la avenida
+BUS_GATES = [{"pos": [-73.6, 154.9], "dir": [0.0704, 0.9975]}]
+DRIVABLE = {"primary": 1.0, "secondary": 1.0, "tertiary": 1.0, "residential": 1.0, "unclassified": 1.0,
+            "living_street": 1.3, "service": 3.0, "pedestrian": 4.0}
+
+
+def bus_loop(ways, nodes, proj):
+    """Ruta circular: el tramo avenida-instituto a mano (BUS_ROUTE) y el resto por
+    el camino más corto entre paradas por las calles de OSM."""
+    import heapq
+    adj = {}
+    for wid, tags, refs in ways:
+        k = DRIVABLE.get(tags.get("highway"))
+        if k is None:
+            continue
+        ok = [r for r in refs if r in nodes]
+        for a, b in zip(ok, ok[1:]):
+            d = math.dist(proj(*nodes[a]), proj(*nodes[b])) * k
+            adj.setdefault(a, []).append((b, d))
+            adj.setdefault(b, []).append((a, d))
+    pos = {n: proj(*nodes[n]) for n in adj}
+
+    def nearest(p):
+        return min(pos, key=lambda n: math.dist(pos[n], p))
+
+    def path(a, b):
+        dist, prev, q = {a: 0.0}, {}, [(0.0, a)]
+        while q:
+            d, u = heapq.heappop(q)
+            if u == b:
+                break
+            if d > dist.get(u, 1e18):
+                continue
+            for v, w in adj[u]:
+                nd = d + w
+                if nd < dist.get(v, 1e18):
+                    dist[v], prev[v] = nd, u
+                    heapq.heappush(q, (nd, v))
+        out = [b]
+        while out[-1] != a:
+            out.append(prev[out[-1]])
+        return [pos[n] for n in reversed(out)]
+
+    route = [list(p) for p in BUS_ROUTE]
+    order = BUS_STOPS[1:] + BUS_STOPS[:1]
+    for i in range(1, len(order)):
+        a = nearest(order[i - 1]["pos"])
+        b = nearest(order[i]["pos"])
+        seg = path(a, b)
+        route += [list(p) for p in seg]
+    # quitar puntos repetidos y suavizar las esquinas (Chaikin)
+    clean = [route[0]]
+    for p in route[1:]:
+        if math.dist(p, clean[-1]) > 0.5:
+            clean.append(p)
+    for _ in range(2):
+        sm = [clean[0]]
+        for a, b in zip(clean, clean[1:]):
+            if math.dist(a, b) < 3.0:
+                sm.append(b)
+                continue
+            L = math.dist(a, b)
+            k = min(0.25, 4.0 / L)   # redondear solo los últimos metros de cada esquina
+            sm.append([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k])
+            sm.append([b[0] - (b[0] - a[0]) * k, b[1] - (b[1] - a[1]) * k])
+        sm.append(clean[-1])
+        clean = sm
+    acc = [0.0]
+    for a, b in zip(clean, clean[1:]):
+        acc.append(acc[-1] + math.dist(a, b))
+    stops = []
+    start = 0
+    for st in BUS_STOPS:
+        # la parada: el punto de la ruta más cercano (en orden, sin volver atrás)
+        best = min(range(start, len(clean)), key=lambda i: math.dist(clean[i], st["pos"]) + (0 if i >= start else 1e9))
+        stops.append({"name": st["name"], "zone": st["zone"], "s": round(acc[best], 1)})
+        start = best + 1
+    return clean, stops
 
 
 # Línea 726 (autobús interurbano verde): parada en la Av. Alejandro Rubio y en el
@@ -728,7 +848,8 @@ def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=(),
     for line in near:
         for i in range(len(line) - 1):
             near_segs.append((line[i], line[i + 1], bbox([line[i], line[i + 1]], FILL_NEAR)))
-    inner = (rect[0] + 2, rect[1] + 2, rect[2] - 2, rect[3] - 2)
+    rects = rect if isinstance(rect, list) else [rect]
+    inners = [(r[0] + 2, r[1] + 2, r[2] - 2, r[3] - 2) for r in rects]
     seg_list = []  # (a, b, radio libre, bbox)
     for s in streets:
         r = s["width"] / 2 + 0.6
@@ -743,7 +864,7 @@ def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=(),
     def ok(poly):
         c0 = centroid(poly)
         poly = [[v[0] + (c0[0] - v[0]) * 0.03, v[1] + (c0[1] - v[1]) * 0.03] for v in poly]
-        if not all(inner[0] <= v[0] <= inner[2] and inner[1] <= v[1] <= inner[3] for v in poly):
+        if not any(all(inner[0] <= v[0] <= inner[2] and inner[1] <= v[1] <= inner[3] for v in poly) for inner in inners):
             return False
         bb = bbox(poly)
         for a, b, r, sb in seg_list:
