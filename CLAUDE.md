@@ -25,7 +25,7 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   y colegio en interiors.gd; en el vestíbulo del instituto está el portal (`scripts/portal.gd`,
   se enciende pagando y abre la zona "tanatorio").
 - Tanatorio: nivel aparte (`scripts/tanatorio.gd`, datos en la clave "tanatorio" de town.json)
-  a ~700 m al este del pueblo, con su propia navmesh. main.gd cambia niebla/luz y oculta el
+  a ~2,5 km al este del pueblo, con su propia navmesh. main.gd cambia niebla/luz y oculta el
   pueblo al entrar. El cementerio NO se modela ni se puede visitar (petición del usuario).
 - Resto del pueblo de fondo (`scripts/backdrop.gd`, clave "backdrop"): casas y calles sencillas
   fuera del recorte, fusionadas por bloques de 100 m, sin colisión, visibility_range 300 m.
