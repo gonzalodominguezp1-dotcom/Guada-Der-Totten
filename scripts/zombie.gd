@@ -62,6 +62,7 @@ var repath := 0.0
 var moan_cd := 0.0
 var head_tilt := 0.0
 var stuck_t := 0.0
+var progress_t := 0.0
 var last_pos := Vector3.ZERO
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 # Cañón de Zurraspa: resbalón (estilo Die Rise) y "sentirse sucio"
@@ -463,6 +464,15 @@ func _physics_process(delta: float) -> void:
 	attack_cd -= delta
 	tear_cd -= delta
 	slip_immune -= delta
+	# ¿atascado? cada 2 s mira cuánto ha avanzado (lo usa la ronda para reaparecerlo)
+	progress_t += delta
+	if progress_t >= 2.0:
+		progress_t = 0.0
+		var moved := Vector2(global_position.x - last_pos.x, global_position.z - last_pos.z).length()
+		var busy_ok: bool = state == State.TEARING or state == State.RISING or state == State.CLIMBING or attack_anim > 0.0 \
+			or (player and global_position.distance_to(player.global_position) < ATTACK_RANGE + 0.6)
+		stuck_t = 0.0 if (moved > 0.6 or busy_ok) else stuck_t + 2.0
+		last_pos = global_position
 	if dirty_t > 0.0:
 		dirty_t -= delta
 		if dirty_t <= 0.0 and stink:
@@ -749,6 +759,15 @@ func apply_dirty(duration: float) -> void:
 		stink.position.y = 1.2
 		add_child(stink)
 	stink.emitting = true
+
+
+## Desaparece sin morir (sin puntos ni power-ups): la ronda lo vuelve a sacar cerca.
+func despawn() -> void:
+	if dead:
+		return
+	dead = true
+	remove_from_group("zombies")
+	queue_free()
 
 
 ## Defecación Nuclear del cañón mejorado.

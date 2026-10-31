@@ -260,7 +260,7 @@ func _process(_delta: float) -> bool:
 		# ráfaga de medio segundo
 		p.fire_cd = 0.0
 		p.shoot()
-	if frame == 2710 + 262:
+	if frame == 2710 + 280:
 		var z = log_lines[0]
 		check(is_instance_valid(z) and (z.slip_t > 0.0 or z.dead), "la zurraspa hace resbalar al zombie")
 	if frame == 2710 + 300:
@@ -336,6 +336,13 @@ func _process(_delta: float) -> bool:
 			if not z.dead:
 				alive += 1
 		check(alive == 0, "la Defecación Nuclear mata a todos (vivos: %d)" % alive)
+		# zombies perdidos: muy lejos -> desaparecen y vuelven a la cola de la ronda
+		var lostz = _test_zombie(p, 3.0, 0.0)
+		lostz.global_position = p.global_position + Vector3(120, 0, 0)
+		lostz.state = lostz.State.CHASE
+		var before_q: int = main.rounds.to_spawn
+		main.rounds._respawn_lost()
+		check(lostz.dead and main.rounds.to_spawn == before_q + 1, "un zombie muy lejos reaparece (vuelve a la cola)")
 		# autobús 726: una vuelta entera al pueblo (acelerado para la prueba)
 		check(t.bus != null, "hay autobús 726")
 		main.rounds.set_process(false)

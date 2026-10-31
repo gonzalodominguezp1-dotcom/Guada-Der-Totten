@@ -19,6 +19,9 @@ var alive := 0
 var spawn_cd := 0.0
 var between := true
 var drops_this_round := 0
+var respawn_cd := 1.0
+const FAR_RESPAWN := 70.0     # más lejos de esto, reaparece cerca del jugador
+const STUCK_RESPAWN := 6.0    # segundos sin avanzar
 
 
 func setup(p, t, h, g = null) -> void:
@@ -69,6 +72,10 @@ func _process(delta: float) -> void:
 	if between or player == null or player.dead:
 		return
 	spawn_cd -= delta
+	respawn_cd -= delta
+	if respawn_cd <= 0.0:
+		respawn_cd = 1.0
+		_respawn_lost()
 	if to_spawn > 0 and alive < MAX_ALIVE and spawn_cd <= 0.0:
 		if _spawn():
 			to_spawn -= 1
@@ -138,6 +145,24 @@ func on_zombie_died(z) -> void:
 		pu.game = game
 		get_parent().add_child(pu)
 		pu.global_position = Vector3(z.global_position.x, 1.0, z.global_position.z)
+
+
+## Zombies perdidos (muy lejos, atascados o caídos del mapa): desaparecen y
+## vuelven a la cola de la ronda para salir otra vez cerca del jugador.
+func _respawn_lost() -> void:
+	if player.dead:
+		return
+	var pp: Vector3 = player.global_position
+	for z in get_tree().get_nodes_in_group("zombies"):
+		if z.dead or z.state == z.State.RISING or z.state == z.State.CLIMBING:
+			continue
+		var d: float = z.global_position.distance_to(pp)
+		var lost: bool = d > FAR_RESPAWN or z.global_position.y < -5.0 \
+			or (z.stuck_t >= STUCK_RESPAWN and d > 8.0) or (z.stuck_t >= 14.0)
+		if lost:
+			z.despawn()
+			alive = maxi(alive - 1, 0)
+			to_spawn += 1
 
 
 ## Tras cruzar un portal: los zombies que se quedaron al otro lado reaparecen

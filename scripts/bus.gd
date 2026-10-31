@@ -190,7 +190,7 @@ func _label(text: String, pos: Vector3, size: int, c: Color, rot_y := 0.0, px :=
 
 func _build_body() -> void:
 	body = AnimatableBody3D.new()
-	body.sync_to_physics = true
+	body.sync_to_physics = false   # se mueve al instante: los viajeros los lleva _carry
 	body.collision_layer = 16
 	body.collision_mask = 0
 	add_child(body)
@@ -450,10 +450,15 @@ func _physics_process(delta: float) -> void:
 			var tgt := _target_speed()
 			v = move_toward(v, tgt, (2.2 if tgt > v else 4.5) * dt)
 			s += v * dt
+			var t0 := body.global_transform
+			var arrived := false
 			if s >= _stop_s(next_stop):
 				s = _stop_s(next_stop)
-				_arrive()
+				arrived = true
 			_place(s)
+			_carry(t0, body.global_transform)
+			if arrived:
+				_arrive()
 			for z in kill_area.get_overlapping_bodies():
 				if z.is_in_group("zombies") and not z.dead and v > 2.0:
 					z.take_hit(999999.0, z.global_position + Vector3.UP, null)
@@ -473,6 +478,22 @@ func _physics_process(delta: float) -> void:
 		engine.pitch_scale = 0.7 + v * 0.04
 
 
+## Lleva a los viajeros "atornillados" al bus: se les aplica el mismo
+## movimiento y giro que al autobús (sin depender de la física de plataformas,
+## que en las curvas los lanzaba fuera). Si aun así se salen, vuelven dentro.
+func _carry(t0: Transform3D, t1: Transform3D) -> void:
+	var dyaw := t1.basis.get_euler().y - t0.basis.get_euler().y
+	for p in riders:
+		if not is_instance_valid(p):
+			continue
+		var local: Vector3 = t0.affine_inverse() * p.global_position
+		local.x = clampf(local.x, -WID * 0.5 + 0.35, WID * 0.5 - 0.35)
+		local.z = clampf(local.z, -LEN * 0.5 + 0.9, LEN * 0.5 - 0.5)
+		local.y = clampf(local.y, FLOOR_Y, 2.0)
+		p.global_position = t1 * local
+		p.rotation.y += wrapf(dyaw, -PI, PI)
+
+
 func _inside(p: Vector3) -> bool:
 	var lp := body.to_local(p)
 	return absf(lp.x) < WID * 0.5 and absf(lp.z) < LEN * 0.5 and lp.y > -0.5 and lp.y < 3.0
@@ -490,6 +511,7 @@ func _depart() -> void:
 		if _inside(p.global_position):
 			riders.append(p)
 			p.collision_mask = 16
+			p.platform_floor_layers = 0    # sin velocidad de plataforma: lo lleva _carry
 	_update_signs()
 
 
@@ -507,6 +529,7 @@ func _arrive() -> void:
 	for p in riders:
 		if is_instance_valid(p):
 			p.collision_mask = PLAYER_MASK
+			p.platform_floor_layers = 0xFFFFFFFF
 			if p.hud:
 				p.hud.announce(str(st["name"]).to_upper())
 	if not riders.is_empty() and game and game.rounds:
