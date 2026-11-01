@@ -510,8 +510,7 @@ func _depart() -> void:
 	for p in get_tree().get_nodes_in_group("player"):
 		if _inside(p.global_position):
 			riders.append(p)
-			p.collision_mask = 16
-			p.platform_floor_layers = 0    # sin velocidad de plataforma: lo lleva _carry
+			p.riding_bus = true    # se queda quieto: lo lleva _carry
 	_update_signs()
 
 
@@ -528,8 +527,7 @@ func _arrive() -> void:
 		town.open_zone(st["zone"])   # el bus te deja allí: ya salen zombies
 	for p in riders:
 		if is_instance_valid(p):
-			p.collision_mask = PLAYER_MASK
-			p.platform_floor_layers = 0xFFFFFFFF
+			p.riding_bus = false
 			if p.hud:
 				p.hud.announce(str(st["name"]).to_upper())
 	if not riders.is_empty() and game and game.rounds:

@@ -19,6 +19,7 @@ const Interiors = preload("res://scripts/interiors.gd")
 const Tanatorio = preload("res://scripts/tanatorio.gd")
 const Backdrop = preload("res://scripts/backdrop.gd")
 const Bus = preload("res://scripts/bus.gd")
+const Skatepark = preload("res://scripts/skatepark.gd")
 const STUCCO_COLORS := [
 	Color(0.88, 0.84, 0.74), Color(0.92, 0.90, 0.85), Color(0.86, 0.76, 0.56),
 	Color(0.90, 0.80, 0.60), Color(0.82, 0.78, 0.70), Color(0.94, 0.92, 0.88),
@@ -54,6 +55,8 @@ var spawn_zones: Array = []  # zona de cada punto de aparición
 var landmark_nodes := {}     # nombre del prefab -> nodo
 var portal_instituto = null
 var tanatorio = null         # nivel aparte (tanatorio.gd)
+var skatepark = null         # nivel aparte (skatepark.gd), se llega por el portal de Segundo Guada
+var portal_segundo = null
 var tanatorio_data := {}
 var backdrop_data := {}
 var bus_route := PackedVector2Array()
@@ -123,6 +126,7 @@ func build(json_path: String) -> void:
 	if not tanatorio_data.is_empty():
 		# nivel aparte, lejos del pueblo (se llega por el portal del instituto)
 		tanatorio = Tanatorio.create(self, tanatorio_data, Vector3(bounds.end.x + 2500.0, 0.0, bounds.get_center().y))
+	skatepark = Skatepark.create(self, Vector3(bounds.end.x + 2500.0, 0.0, bounds.get_center().y + 1500.0))
 	_choose_player_start()
 	_build_lamps()
 	_bake_navigation()
@@ -601,6 +605,8 @@ func _kind_for(b: Dictionary, idx: int) -> Array:
 		return [Kind.GRANITE, 2]
 	var c: Vector2 = b["rect"].get_center()
 	var r := fmod(float(idx) * 0.618034, 1.0)
+	if island_at(c) == "segundo":
+		return [Kind.BRICK, 1]   # Segundo Guada: chalets de ladrillo con persianas
 	var r2 := fmod(float(idx) * 0.414214, 1.0)
 	if c.distance_to(_stone_spot) < 40.0:
 		return [Kind.GRANITE, 0] if r < 0.5 else ([Kind.BRICK, 0] if r < 0.72 else [Kind.STUCCO, 0])
@@ -869,6 +875,8 @@ func _build_prefabs() -> void:
 					Interiors.instituto(lm, self)
 				"colegio":
 					Interiors.colegio(lm, self)
+				"artes22":
+					Interiors.artes22(lm, self)
 				_:
 					Landmarks.build(pf["prefab"], lm, self)
 
@@ -952,6 +960,14 @@ func _in_plazuela(p: Vector2) -> bool:
 		if Geometry2D.is_point_in_polygon(p, pz["points"]):
 			return true
 	return false
+
+
+## Zona de parada (isla) en la que cae el punto, o "" si no está en ninguna
+func island_at(p: Vector2) -> String:
+	for il in islands:
+		if il["rect"].has_point(p):
+			return il["zone"]
+	return ""
 
 
 ## ¿Está el punto dentro de alguna zona con detalle (recorte principal o paradas nuevas)?

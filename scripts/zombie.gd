@@ -11,6 +11,7 @@ enum State { RISING, TO_WINDOW, TEARING, CLIMBING, CHASE, WANDER }
 
 const ATTACK_RANGE := 1.4
 const ATTACK_DAMAGE := 50.0
+const NPC_FACE := "res://assets/npc/cara.png"   # foto de la cara del NPC del skatepark
 const HEADSHOT_MULT := 4.0
 const SKIN_SHADER = preload("res://shaders/zombie_skin.gdshader")
 const CLOTH_SHADER = preload("res://shaders/zombie_cloth.gdshader")
@@ -61,6 +62,8 @@ var tear_cd := 0.0
 var repath := 0.0
 var moan_cd := 0.0
 var head_tilt := 0.0
+var special := ""            # "" normal, "panzer" (L'Antica) o "npc" (skatepark)
+var attack_damage := ATTACK_DAMAGE
 var stuck_t := 0.0
 var progress_t := 0.0
 var last_pos := Vector3.ZERO
@@ -102,6 +105,8 @@ func _ready() -> void:
 		_build_body()
 	anim_t = randf() * 10.0
 	head_tilt = randf_range(-0.35, 0.35)
+	if special != "":
+		_setup_special()
 	moan_cd = randf_range(1.0, 5.0)
 	last_pos = global_position
 	_rise()
@@ -126,6 +131,9 @@ func _rise() -> void:
 
 func _end_rise() -> void:
 	if dead:
+		return
+	if special == "npc":
+		state = State.WANDER
 		return
 	state = State.TO_WINDOW if window != null else State.CHASE
 
@@ -176,6 +184,9 @@ func _skin_mat() -> ShaderMaterial:
 	var tints := [Color(0.38, 0.40, 0.32), Color(0.42, 0.38, 0.34), Color(0.34, 0.37, 0.33), Color(0.44, 0.41, 0.36)]
 	m.set_shader_parameter("tint", tints[randi() % tints.size()])
 	m.set_shader_parameter("blood", randf_range(0.25, 0.6))
+	if special == "npc":
+		m.set_shader_parameter("tint", Color(0.86, 0.66, 0.54))
+		m.set_shader_parameter("blood", 0.0)
 	m.set_shader_parameter("seed", randf() * 10.0)
 	return m
 
@@ -188,6 +199,9 @@ func _cloth_mat(c: Color, tear: float) -> ShaderMaterial:
 	m.set_shader_parameter("tear", tear)
 	m.set_shader_parameter("blood", randf_range(0.2, 0.6))
 	m.set_shader_parameter("seed", randf() * 10.0)
+	if special == "npc":
+		m.set_shader_parameter("tear", 0.0)
+		m.set_shader_parameter("blood", 0.0)
 	return m
 
 
@@ -495,7 +509,7 @@ func _physics_process(delta: float) -> void:
 
 	if player.downed and state == State.CHASE:
 		state = State.WANDER
-	elif not player.downed and state == State.WANDER:
+	elif not player.downed and state == State.WANDER and special != "npc":
 		state = State.CHASE
 
 	if (state == State.TO_WINDOW or state == State.TEARING) and not is_instance_valid(window):
@@ -588,7 +602,7 @@ func _try_attack() -> void:
 		return
 	var d := Vector2(player.global_position.x - global_position.x, player.global_position.z - global_position.z).length()
 	if d < ATTACK_RANGE + 0.5:
-		player.take_damage(ATTACK_DAMAGE)
+		player.take_damage(attack_damage)
 
 
 func _climb() -> void:
@@ -625,7 +639,7 @@ func _process(delta: float) -> void:
 	visual.rotation.x = -1.35 * fall
 	visual.position.y = 0.18 * fall if fall > 0.0 else visual.position.y
 	moan_cd -= delta
-	if moan_cd <= 0.0:
+	if moan_cd <= 0.0 and special != "npc":
 		moan_cd = randf_range(3.0, 8.0)
 		Sfx.play3d("zombie_moan_%d" % (randi() % 6), global_position + Vector3(0, 1.6, 0), -5.0, randf_range(0.8, 1.15), 30.0)
 	var moving := Vector2(velocity.x, velocity.z).length()
@@ -759,6 +773,68 @@ func apply_dirty(duration: float) -> void:
 		stink.position.y = 1.2
 		add_child(stink)
 	stink.emitting = true
+
+
+## Enemigos especiales: el Panzer de L'Antica y el NPC del skatepark
+func _setup_special() -> void:
+	var cap: CapsuleShape3D = col_shape.shape
+	if special == "panzer":
+		visual.scale = Vector3(1.35, 1.35, 1.35)
+		cap.radius = 0.5
+		cap.height = 2.5
+		col_shape.position.y = 1.25
+		attack_damage = 90.0
+		var steel := StandardMaterial3D.new()
+		steel.albedo_color = Color(0.16, 0.17, 0.16)
+		steel.metallic = 0.8
+		steel.roughness = 0.4
+		var visor := StandardMaterial3D.new()
+		visor.albedo_color = Color(1.0, 0.45, 0.05)
+		visor.emission_enabled = true
+		visor.emission = Color(1.0, 0.4, 0.05)
+		visor.emission_energy_multiplier = 3.0
+		var parent: Node3D = spine if spine else visual
+		var y0 := 0.0 if spine else 1.2
+		_boxm(parent, Vector3(0.5, 0.55, 0.36), Vector3(0, y0 + 0.3, 0), steel)            # coraza
+		_boxm(parent, Vector3(0.6, 0.15, 0.4), Vector3(0, y0 + 0.6, 0), steel)             # hombreras
+		var hparent: Node3D = head if head else visual
+		var hy := 0.0 if head else 1.75
+		_boxm(hparent, Vector3(0.3, 0.3, 0.3), Vector3(0, hy + 0.08, 0), steel)           # casco
+		_boxm(hparent, Vector3(0.22, 0.05, 0.02), Vector3(0, hy + 0.1, -0.16), visor)
+		var tank := _boxm(parent, Vector3(0.36, 0.5, 0.2), Vector3(0, y0 + 0.3, 0.3), steel)
+		tank.name = "mochila"
+		var l := OmniLight3D.new()
+		l.light_color = Color(1.0, 0.45, 0.1)
+		l.light_energy = 1.2
+		l.omni_range = 3.0
+		l.position = Vector3(0, 2.1, -0.4)
+		add_child(l)
+	elif special == "npc":
+		if ResourceLoader.exists(NPC_FACE) and head:
+			var face := MeshInstance3D.new()
+			var qm := QuadMesh.new()
+			qm.size = Vector2(0.24, 0.28)
+			face.mesh = qm
+			var fm := StandardMaterial3D.new()
+			fm.albedo_texture = load(NPC_FACE)
+			fm.cull_mode = BaseMaterial3D.CULL_DISABLED
+			face.material_override = fm
+			face.position = Vector3(0, 0.06, -0.135)
+			face.rotation.y = PI
+			head.add_child(face)
+		# gorra y sudadera roja para distinguirlo
+		if head:
+			var capm := StandardMaterial3D.new()
+			capm.albedo_color = Color(0.1, 0.1, 0.12)
+			_boxm(head, Vector3(0.24, 0.08, 0.26), Vector3(0, 0.17, 0), capm)
+			_boxm(head, Vector3(0.22, 0.02, 0.12), Vector3(0, 0.14, -0.17), capm)
+
+
+## Sale ya de pie (sin salir del suelo)
+func skip_rise() -> void:
+	if visual:
+		visual.position.y = 0.0
+	state = State.WANDER if special == "npc" else State.CHASE
 
 
 ## Desaparece sin morir (sin puntos ni power-ups): la ronda lo vuelve a sacar cerca.

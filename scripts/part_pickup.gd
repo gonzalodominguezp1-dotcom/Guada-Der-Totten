@@ -2,7 +2,7 @@ extends Node3D
 ## Pieza del Cañón de Zurraspa tirada por el mapa. Brilla un poco y gira.
 
 const Weapons = preload("res://scripts/weapons.gd")
-const NAMES := {"calzoncillo": "el calzoncillo sucio", "tele": "la tele de tubo", "canon": "el cañón"}
+const NAMES := {"calzoncillo": "el calzoncillo sucio", "tele": "la tele de tubo", "canon": "el cañón", "pepino": "el pepino"}
 
 var part := "calzoncillo"
 var model: Node3D

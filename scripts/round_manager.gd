@@ -135,6 +135,19 @@ func _spawn() -> bool:
 
 
 func on_zombie_died(z) -> void:
+	if game and game.has_method("on_zombie_killed"):
+		game.on_zombie_killed(z)
+	if z.special != "":
+		# los especiales no cuentan en la ronda; sueltan su pieza
+		var part: String = {"panzer": "tele", "npc": "calzoncillo"}.get(z.special, "")
+		if part != "":
+			var pp = load("res://scripts/part_pickup.gd").new()
+			pp.part = part
+			get_parent().add_child(pp)
+			pp.global_position = Vector3(z.global_position.x, z.global_position.y + 0.6, z.global_position.z)
+			if hud:
+				hud.announce("¡%s ha soltado algo!" % ("EL PANZER" if z.special == "panzer" else "EL COLEGA"))
+		return
 	alive = maxi(alive - 1, 0)
 	var last := to_spawn == 0 and alive == 0
 	if not last and drops_this_round < MAX_DROPS and randf() < 0.035:
@@ -154,7 +167,7 @@ func _respawn_lost() -> void:
 		return
 	var pp: Vector3 = player.global_position
 	for z in get_tree().get_nodes_in_group("zombies"):
-		if z.dead or z.state == z.State.RISING or z.state == z.State.CLIMBING:
+		if z.dead or z.special != "" or z.state == z.State.RISING or z.state == z.State.CLIMBING:
 			continue
 		var d: float = z.global_position.distance_to(pp)
 		var lost: bool = d > FAR_RESPAWN or z.global_position.y < -5.0 \
@@ -165,11 +178,31 @@ func _respawn_lost() -> void:
 			to_spawn += 1
 
 
+## Enemigos especiales (no cuentan en la ronda): "panzer" o "npc"
+func spawn_special(kind: String, pos: Vector3):
+	var z := ZombieScript.new()
+	z.special = kind
+	z.player = player
+	z.manager = self
+	if kind == "panzer":
+		z.max_health = 6000.0 + 900.0 * round_num
+		z.speed = 1.6
+	else:
+		z.max_health = 2500.0
+		z.speed = 3.4
+		z.runner = true
+	get_parent().add_child(z)
+	z.global_position = pos
+	if kind == "npc":
+		z.skip_rise()
+	return z
+
+
 ## Tras cruzar un portal: los zombies que se quedaron al otro lado reaparecen
 ## cerca del jugador (si no, la ronda se quedaría atascada).
 func relocate_zombies() -> void:
 	for z in get_tree().get_nodes_in_group("zombies"):
-		if z.dead or z.global_position.distance_to(player.global_position) < 150.0:
+		if z.dead or z.special != "" or z.global_position.distance_to(player.global_position) < 150.0:
 			continue
 		var spot = _pick_spawn()
 		if spot == null or spot["barricade"] != null:

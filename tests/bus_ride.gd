@@ -28,4 +28,4 @@ func _process(_d):
 		print("f ", f, " st ", b.state, " s ", int(b.s), " v ", snappedf(b.v, 0.1), " next ", b.next_stop, " lp ", lp.snappedf(0.1), " mask ", p.collision_mask, " floor ", p.is_on_floor(), " BAD" if bad else "")
 		if bad:
 			return true
-	return f > 30000 or b.arrivals >= 5
+	return f > 30000 or b.arrivals >= 3

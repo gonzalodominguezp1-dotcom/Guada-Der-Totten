@@ -445,6 +445,30 @@ static func part_model(id: String, s := 1.0) -> Node3D:
 			for side in [-1.0, 1.0]:
 				_limb(root, Vector3(0.02 * side, 0.18, 0.08) * s, Vector3(0.14 * side, 0.42, 0.12) * s, 0.005 * s, "silver")
 			_sphere(root, 0.05 * s, Vector3(0.12, 0.17, 0.05) * s, "zurraspa", Vector3(1.4, 0.3, 1.2))
+		"pepino":
+			var pep := StandardMaterial3D.new()
+			pep.albedo_color = Color(0.16, 0.38, 0.1)
+			pep.roughness = 0.5
+			var body := MeshInstance3D.new()
+			var cm := CapsuleMesh.new()
+			cm.radius = 0.045 * s
+			cm.height = 0.32 * s
+			body.mesh = cm
+			body.material_override = pep
+			body.rotation.z = PI * 0.5
+			root.add_child(body)
+			var dot := StandardMaterial3D.new()
+			dot.albedo_color = Color(0.5, 0.7, 0.3)
+			for k in 10:
+				var b := MeshInstance3D.new()
+				var sm := SphereMesh.new()
+				sm.radius = 0.008 * s
+				sm.height = 0.016 * s
+				b.mesh = sm
+				b.material_override = dot
+				var a := k * 2.4
+				b.position = Vector3((-0.11 + k * 0.024) * s, cos(a) * 0.043 * s, sin(a) * 0.043 * s)
+				root.add_child(b)
 		"canon":
 			_tube(root, 0.05 * s, 0.38 * s, Vector3.ZERO, "blued", 20)
 			for k in 3:

@@ -6,7 +6,8 @@ extends Node3D
 signal activated
 
 const SHADER = preload("res://shaders/portal.gdshader")
-const COST := 1500
+var cost := 1500
+var zone_name := "tanatorio"     # zona que abre al encenderlo
 const COOLDOWN := 3.0
 
 var town
@@ -149,7 +150,7 @@ func activate() -> void:
 	if other:
 		other._set_power(true)
 	if town:
-		town.open_zone("tanatorio")
+		town.open_zone(zone_name)
 	activated.emit()
 
 
@@ -160,7 +161,7 @@ func can_interact(player) -> bool:
 
 
 func get_prompt(_player) -> String:
-	return "Pulsa [F] para encender el portal [Coste: %d]" % COST
+	return "Pulsa [F] para encender el portal [Coste: %d]" % cost
 
 
 func is_hold() -> bool:
@@ -168,7 +169,7 @@ func is_hold() -> bool:
 
 
 func interact(player) -> void:
-	if active or not player.spend_points(COST):
+	if active or not player.spend_points(cost):
 		Sfx.play("deny", -8.0)
 		return
 	Sfx.play("purchase", -4.0)

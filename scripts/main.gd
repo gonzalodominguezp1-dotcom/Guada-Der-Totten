@@ -19,6 +19,7 @@ var powerups := {}   # nombre -> segundos restantes
 var parts := {}      # piezas del Cañón de Zurraspa conseguidas
 var env: Environment
 var in_tanatorio := false
+var current_level = null     # null = pueblo; si no, tanatorio o skatepark
 var mood_tween: Tween
 var base_mood := {}
 
@@ -40,6 +41,8 @@ func _ready() -> void:
 		b.game = self
 	if town.tanatorio:
 		town.tanatorio.visible = false
+	if town.skatepark:
+		town.skatepark.visible = false
 
 	hud = HudScript.new()
 	hud.name = "HUD"
@@ -64,10 +67,13 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	flicker_t += delta
-	if town.tanatorio and player:
-		var now: bool = town.tanatorio.contains(player.global_position)
-		if now != in_tanatorio:
-			set_tanatorio_mood(now)
+	if player:
+		var lvl = null
+		for l in [town.tanatorio, town.skatepark]:
+			if l and l.contains(player.global_position):
+				lvl = l
+		if lvl != current_level:
+			_set_level(lvl)
 	for l in town.lamps:
 		var light: OmniLight3D = l["light"]
 		match l["mode"]:
@@ -84,13 +90,21 @@ func _process(delta: float) -> void:
 		hud.set_powerups(powerups)
 
 
+## Cambio de nivel (portales): solo se dibuja el sitio donde estás
+func _set_level(lvl) -> void:
+	current_level = lvl
+	for c in town.get_children():
+		if c is Node3D:
+			c.visible = (c == lvl) if lvl != null else not (c == town.tanatorio or c == town.skatepark)
+	set_tanatorio_mood(lvl != null and lvl == town.tanatorio)
+	if lvl != null and lvl == town.skatepark:
+		lvl.on_enter()
+
+
 ## Al cruzar el portal: en el tanatorio, niebla espesa, colores apagados y
 ## solo se dibuja ese nivel (y al volver, al revés).
 func set_tanatorio_mood(on: bool) -> void:
 	in_tanatorio = on
-	for c in town.get_children():
-		if c is Node3D:
-			c.visible = (c == town.tanatorio) == on
 	if mood_tween:
 		mood_tween.kill()
 	mood_tween = create_tween().set_parallel(true)
@@ -105,9 +119,15 @@ func set_tanatorio_mood(on: bool) -> void:
 
 func collect_part(part: String) -> void:
 	parts[part] = true
-	var names := {"calzoncillo": "EL CALZONCILLO SUCIO", "tele": "LA TELE DE TUBO", "canon": "EL CAÑÓN"}
+	var names := {"calzoncillo": "EL CALZONCILLO SUCIO", "tele": "LA TELE DE TUBO", "canon": "EL CAÑÓN", "pepino": "EL PEPINO"}
 	hud.announce("¡Has encontrado %s!" % names.get(part, part))
 	hud.set_parts(parts)
+
+
+## Para el easter egg: cada zombie que muere (lo llama la ronda)
+func on_zombie_killed(z) -> void:
+	if town.skatepark:
+		town.skatepark.on_zombie_killed(z, player)
 
 
 func instakill_active() -> bool:

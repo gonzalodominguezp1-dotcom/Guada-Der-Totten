@@ -246,8 +246,8 @@ def main():
     def rel(p):
         return [round(p[0] - ox, 2), round(p[1] - oz, 2)]
 
-    islands = [(st["zone"], (st["pos"][0] - ISLAND_HALF, st["pos"][1] - ISLAND_HALF,
-                             st["pos"][0] + ISLAND_HALF, st["pos"][1] + ISLAND_HALF)) for st in BUS_STOPS if st.get("island")]
+    islands = [(st["zone"], (st["center"][0] - ISLAND_HALF, st["center"][1] - ISLAND_HALF,
+                             st["center"][0] + ISLAND_HALF, st["center"][1] + ISLAND_HALF)) for st in BUS_STOPS if st.get("island")]
     detail_rects = [crop] + [r for _z, r in islands]
 
     def in_crop(p, margin=0.0):
@@ -326,7 +326,7 @@ def main():
                 fixed.append(pf)
             continue
         a = rel(ex["anchor"])
-        if crop[0] - ox <= a[0] <= crop[2] - ox and crop[1] - oz <= a[1] <= crop[3] - oz:
+        if in_crop(ex["anchor"]):
             prefabs.append({"prefab": ex["prefab"], "street": ex["street"],
                             "osm_points": [[a[0] - 1, a[1] - 1], [a[0] + 1, a[1] - 1], [a[0] + 1, a[1] + 1], [a[0] - 1, a[1] + 1]]})
     for pf in prefabs:
@@ -362,13 +362,13 @@ def main():
     # propio recorrido del autobús (para que la parada quede dentro de la zona)
     route, stops = bus_loop(ways, nodes, proj)
     for zone, rr in islands:
-        st_pos = next(st["pos"] for st in BUS_STOPS if st["zone"] == zone)
+        st_pos = next(st["center"] for st in BUS_STOPS if st["zone"] == zone)
         inner = (st_pos[0] - ISLAND_PLAY, st_pos[1] - ISLAND_PLAY, st_pos[0] + ISLAND_PLAY, st_pos[1] + ISLAND_PLAY)
         for part in clip_polyline(route, inner):
             if len(part) >= 2:
                 playable.append({"zone": zone, "name": "Ruta 726", "points": [rel(p) for p in part], "width": 6.0})
     for zone, rr in islands:
-        st_pos = next(st["pos"] for st in BUS_STOPS if st["zone"] == zone)
+        st_pos = next(st["center"] for st in BUS_STOPS if st["zone"] == zone)
         inner = (st_pos[0] - ISLAND_PLAY, st_pos[1] - ISLAND_PLAY, st_pos[0] + ISLAND_PLAY, st_pos[1] + ISLAND_PLAY)
         for wid, tags, refs in ways:
             if tags.get("highway") not in ("residential", "living_street", "unclassified", "tertiary", "secondary", "pedestrian"):
@@ -420,6 +420,7 @@ def main():
         fill_houses(buildings, streets, plazas, pois, [(r[0] - ox, r[1] - oz, r[2] - ox, r[3] - oz) for r in detail_rects], rng,
                     extra_obstacles=[pf["footprint"] for pf in prefabs] + [a["points"] for a in areas]
                     + [[rel(p) for p in poly] for poly in NO_FILL_AREAS],
+                    chalets=[(r[0] - ox, r[1] - oz, r[2] - ox, r[3] - oz) for _z, r in islands],
                     near=[pl["points"] for pl in playable] + [a["points"] + a["points"][:1] for a in areas])
 
     start = None
@@ -472,7 +473,7 @@ def main():
 
 PREFAB_SIZE = {"bar_chiqui": (15.0, 22.0), "bazar": (14.0, 11.0), "sala_groove": (13.0, 9.0),
                "lantica": (16.0, 10.0), "polideportivo": (46.0, 30.0), "ayuntamiento": (16.0, 12.4),
-               "instituto": (17.7, 67.9), "colegio": (30.2, 17.9)}  # ancho, fondo (m)
+               "instituto": (17.7, 67.9), "colegio": (30.2, 17.9), "artes22": (11.0, 10.0)}  # ancho, fondo (m)
 
 # Edificios hechos a mano que no están en OSM: posición aproximada (x, z en
 # metros desde el centro de la exportación) y calle a la que dan.
@@ -482,6 +483,8 @@ EXTRA_PREFABS = [
     {"prefab": "sala_groove", "anchor": [28.0, 121.0], "street": "Alejandro Rubio"},
     # L'Antica: al oeste del aparcamiento, en la acera sur de la avenida
     {"prefab": "lantica", "anchor": [-136.0, 158.0], "street": "Alejandro Rubio"},
+    # Segundo Guada: el chalet de la Calle Artes 22 (la ventana del pepino)
+    {"prefab": "artes22", "anchor": [-772.0, 853.0], "street": "Calle Artes"},
     # Polideportivo: fachada norte (puertas amarillas) mirando a la plaza trasera
     {"prefab": "polideportivo", "front": [-40.3, 191.2], "fwd": [-0.168, -0.986]},
     # Ayuntamiento: sustituye al edificio de OSM, fachada a la Plaza Consistorial
@@ -496,8 +499,8 @@ EXTRA_PREFABS = [
 # Zonas jugables (coordenadas de la exportación). Todo lo demás queda fuera,
 # cerrado con tapias y escombros.
 PLAYABLE = [
-    {"zone": "avenida", "street": "Avenida Alejandro Rubio", "rect": [-95, -1e9, 61.5, 1e9]},
-    {"zone": "lantica", "street": "Avenida Alejandro Rubio", "rect": [-1e9, -1e9, -95, 1e9]},
+    # la avenida entera (L'Antica incluida: su puerta se compra en el propio bar)
+    {"zone": "avenida", "street": "Avenida Alejandro Rubio", "rect": [-1e9, -1e9, 61.5, 1e9]},
     {"zone": "poli", "street": "Calle Nogal", "rect": [-1e9, 132, 1e9, 172]},
     {"zone": "plaza", "street": "Calle Pozo", "rect": [-1e9, -1e9, 1e9, 1e9]},
     {"zone": "plaza", "street": "Plaza Libertad", "rect": [-1e9, -1e9, 1e9, 1e9]},
@@ -526,8 +529,6 @@ PLAYABLE_AREAS = [
 SQUARE_ZONES = {"Plaza Consistorial": "plaza", "Plaza Libertad": "plaza"}
 # Puertas de zona (escombros que se compran): calle, eje y valor donde cortan
 ZONE_DOORS = [
-    {"zone": "lantica", "street": "Avenida Alejandro Rubio", "axis": 0, "value": -96.0, "cost": 1000,
-     "label": "despejar el paso hacia L'Antica"},
     {"zone": "poli", "street": "Calle Nogal", "axis": 1, "value": 141.0, "cost": 1000,
      "label": "despejar la Calle Nogal (polideportivo)"},
     {"zone": "plaza", "street": "Calle Pozo", "axis": 0, "value": 73.0, "cost": 1250,
@@ -596,15 +597,16 @@ def backdrop_json(ways, nodes, proj, rel, rects_in, rect, rng):
 
 # Paradas de la línea 726 (coordenadas de la exportación). Las que llevan
 # "island" son zonas jugables nuevas alrededor de la parada.
+# Recorrido (foto del usuario): Chiqui → Eras de Abajo → instituto → Segundo Guada
+# → vuelta a la avenida por el oeste → Chiqui. "via": puntos por los que pasar.
 BUS_STOPS = [
-    {"name": "Av. Alejandro Rubio", "zone": "avenida", "pos": [-20, 135.8]},
+    {"name": "Bar Chiqui", "zone": "avenida", "pos": [-20, 135.8]},
     {"name": "Instituto", "zone": "instituto", "pos": [-92, 453.5]},
-    {"name": "Calle Hadar", "zone": "suroeste", "pos": [-940, 660], "island": True},
-    {"name": "Calle Encinas", "zone": "norte", "pos": [30, -100], "island": True},
-    {"name": "Av. Virgen del Espinar", "zone": "este", "pos": [760, 140], "island": True},
+    {"name": "Segundo Guada", "zone": "segundo", "pos": [-800, 790], "island": True, "center": [-785, 850]},
 ]
-ISLAND_HALF = 85.0     # mitad del lado del recuadro con detalle de cada parada nueva
-ISLAND_PLAY = 55.0     # calles jugables alrededor de la parada
+BUS_RETURN_VIA = [[-209, 153]]   # entra en la avenida por el oeste (pasa por L'Antica)
+ISLAND_HALF = 105.0    # mitad del lado del recuadro con detalle de la parada nueva
+ISLAND_PLAY = 80.0     # calles jugables alrededor
 # Barrera "SOLO BUS" en Eras de Abajo, junto a la avenida
 BUS_GATES = [{"pos": [-73.6, 154.9], "dir": [0.0704, 0.9975]}]
 DRIVABLE = {"primary": 1.0, "secondary": 1.0, "tertiary": 1.0, "residential": 1.0, "unclassified": 1.0,
@@ -649,10 +651,10 @@ def bus_loop(ways, nodes, proj):
         return [pos[n] for n in reversed(out)]
 
     route = [list(p) for p in BUS_ROUTE]
-    order = BUS_STOPS[1:] + BUS_STOPS[:1]
-    for i in range(1, len(order)):
-        a = nearest(order[i - 1]["pos"])
-        b = nearest(order[i]["pos"])
+    targets = [st["pos"] for st in BUS_STOPS[1:]] + BUS_RETURN_VIA + [BUS_STOPS[0]["pos"]]
+    for i in range(1, len(targets)):
+        a = nearest(targets[i - 1])
+        b = nearest(targets[i])
         seg = path(a, b)
         route += [list(p) for p in seg]
     # quitar puntos repetidos y suavizar las esquinas (Chaikin)
@@ -842,7 +844,7 @@ def make_plazuelas(buildings, streets):
 FILL_NEAR = 70.0   # solo se rellenan casas a esta distancia de lo jugable (rendimiento)
 
 
-def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=(), near=()):
+def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=(), near=(), chalets=()):
     """Coloca casas adosadas a lo largo de las calles donde OSM no tiene edificios."""
     near_segs = []
     for line in near:
@@ -892,6 +894,9 @@ def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=(),
                     continue
                 dx, dz = (b[0] - a[0]) / L, (b[1] - a[1]) / L
                 nx, nz = -dz * side, dx * side
+                # urbanización de chalets: casas separadas y retranqueadas (jardín delante)
+                mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+                chalet = any(r[0] <= mid[0] <= r[2] and r[1] <= mid[1] <= r[3] for r in chalets)
                 t = 1.0
                 while t < L - 3.0:
                     w = rng.uniform(6.0, 10.5)
@@ -899,7 +904,7 @@ def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=(),
                     w = min(w, L - t)
                     if w < 4.0:
                         break
-                    o = off + rng.uniform(0.0, 0.3)
+                    o = off + rng.uniform(0.0, 0.3) + (4.5 if chalet else 0.0)
                     p0 = [a[0] + dx * t + nx * o, a[1] + dz * t + nz * o]
                     p1 = [p0[0] + dx * w, p0[1] + dz * w]
                     p2 = [p1[0] + nx * depth, p1[1] + nz * depth]
@@ -919,7 +924,7 @@ def fill_houses(buildings, streets, plazas, pois, rect, rng, extra_obstacles=(),
                         buildings.append({"points": poly, "height": round(floors * 3.1 + rng.uniform(0.2, 0.6), 2),
                                           "name": "", "type": "fill"})
                         obstacles.append((poly, bbox(poly, 0.4)))
-                    t += w + (rng.uniform(1.5, 3.0) if rng.random() < 0.12 else 0.0)
+                    t += w + (rng.uniform(3.0, 5.0) if chalet else (rng.uniform(1.5, 3.0) if rng.random() < 0.12 else 0.0))
 
 
 if __name__ == "__main__":

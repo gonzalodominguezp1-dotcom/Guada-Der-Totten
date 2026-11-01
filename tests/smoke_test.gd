@@ -210,9 +210,9 @@ func _process(_delta: float) -> bool:
 		# zonas, piezas y Cañón de Zurraspa
 		var map: RID = t.nav_region.get_navigation_map()
 		var start: Vector3 = t.bar.to_global(Vector3(0.0, 0.0, 3.0))
-		check(t.zone_doors.size() == 4, "4 puertas de escombros entre zonas (%d)" % t.zone_doors.size())
+		check(t.zone_doors.size() == 3, "3 puertas de escombros entre zonas (%d)" % t.zone_doors.size())
 		var parts := get_nodes_in_group("parts")
-		check(parts.size() == 3, "3 piezas del cañón en el mapa (%d)" % parts.size())
+		check(parts.size() == 1, "el cañón está en el bazar (%d piezas sueltas)" % parts.size())
 		for pt in parts:
 			var goal: Vector3 = pt.global_position
 			goal.y = 0.0
@@ -225,6 +225,9 @@ func _process(_delta: float) -> bool:
 			check(t.zone_open(d.zone), "abrir escombros abre la zona '%s'" % d.zone)
 		for pt in parts:
 			pt.interact(p)
+		# la tele (Panzer) y el calzoncillo (colega) se prueban al final
+		main.collect_part("tele")
+		main.collect_part("calzoncillo")
 		check(main.parts.size() == 3, "recoger las 3 piezas")
 		# camino andando del bar al portal del instituto
 		var pi = t.portal_instituto
@@ -348,17 +351,17 @@ func _process(_delta: float) -> bool:
 		main.rounds.set_process(false)
 		t.bus.speed_mult = 20.0
 	if frame == 2710 + 2700:
-		var zones := ["instituto", "suroeste", "norte", "este", "avenida"]
+		var zones := ["instituto", "segundo", "avenida"]
 		var missing := []
 		for z in zones:
 			if not t.bus.visited.has(z):
 				missing.append(z)
-		check(missing.is_empty(), "el autobús para en las 5 paradas (faltan: %s)" % str(missing))
-		for z in ["suroeste", "norte", "este"]:
+		check(missing.is_empty(), "el autobús para en las 3 paradas (faltan: %s)" % str(missing))
+		for z in ["segundo"]:
 			check(t.zone_open(z), "llegar en bus abre la zona '%s'" % z)
 		# navegación en las zonas nuevas: de la marquesina a algún punto de aparición
 		var map: RID = t.nav_region.get_navigation_map()
-		for z in ["suroeste", "norte", "este"]:
+		for z in ["segundo"]:
 			var shelter: Node3D = t.nav_region.get_node_or_null("Parada_" + z)
 			var ok_nav := false
 			if shelter:
@@ -385,6 +388,73 @@ func _process(_delta: float) -> bool:
 		var moved: float = t.bus.body.global_position.distance_to(log_lines[0])
 		check(moved > 8.0 and absf(lp.x) < 1.4 and absf(lp.z) < 6.2 and lp.y > 0.0,
 			"se puede viajar de pie en el autobús (%.0f m recorridos, jugador en %s)" % [moved, str(lp.snappedf(0.1))])
+		# easter egg: Panzer de L'Antica
+		t.bus.state = t.bus.State.WAITING
+		t.bus.wait_t = 999.0
+		for r in t.bus.riders:
+			r.riding_bus = false
+		t.bus.riders.clear()
+		p.global_position = t.landmark_nodes["lantica"].to_global(Vector3(0, 0.2, -5.0))
+		p.velocity = Vector3.ZERO
+	if frame == 2710 + 3240:
+		var pz = null
+		for z in get_nodes_in_group("zombies"):
+			if z.special == "panzer":
+				pz = z
+		check(pz != null, "al entrar en L'Antica sale el Panzer")
+		if pz:
+			pz.take_hit(1e9, pz.global_position + Vector3.UP, p)
+	if frame == 2710 + 3260:
+		var got := false
+		for pt in get_nodes_in_group("parts"):
+			if pt.part == "tele":
+				got = true
+		check(got, "el Panzer suelta la tele")
+		# la ventana de la Calle Artes 22: con el cañón se ilumina y suelta el pepino
+		var wins := get_nodes_in_group("ee_window")
+		check(wins.size() == 1, "ventana del pepino en la Calle Artes 22")
+		if wins.size() == 1:
+			check(wins[0].lit, "la ventana se ilumina con el arma especial")
+			wins[0].take_hit(10.0, wins[0].global_position, p)
+		for pt in get_nodes_in_group("parts"):
+			pt.interact(p)
+		check(main.parts.get("pepino", false), "la ventana suelta el pepino")
+		# portal de Segundo Guada al skatepark
+		check(t.portal_segundo != null and t.skatepark != null, "portal de Segundo Guada y skatepark")
+		p.points += 5000
+		t.portal_segundo.interact(p)
+		t.portal_segundo.teleport(p)
+	if frame == 2710 + 3290:
+		check(main.current_level == t.skatepark, "el portal lleva al skatepark")
+		var npc = null
+		for z in get_nodes_in_group("zombies"):
+			if z.special == "npc":
+				npc = z
+		check(npc != null, "en el skatepark está el colega")
+		if npc:
+			npc.take_hit(1e9, npc.global_position + Vector3.UP, p)
+	if frame == 2710 + 3310:
+		var got := false
+		for pt in get_nodes_in_group("parts"):
+			if pt.part == "calzoncillo":
+				got = true
+		check(got, "el colega suelta el calzoncillo")
+		var sp = t.skatepark
+		check(sp.statue.visible, "con el pepino aparece la estatua del culo")
+		p._equip(p.weapons.find("zurraspa_pap"), false)
+		for k in 10:
+			var z = load("res://scripts/zombie.gd").new()
+			z.player = p
+			z.manager = main.rounds
+			main.add_child(z)
+			main.rounds.alive += 1
+			z.global_position = sp.statue.global_position + Vector3(3.0, 0.1, 3.0)
+			z.take_hit(1e9, z.global_position + Vector3.UP, p)
+		check(sp.fed == 10, "la estatua come 10 zombies (%d)" % sp.fed)
+		var feeders := get_nodes_in_group("statue_feeder")
+		if feeders.size() == 1:
+			feeders[0].interact(p)
+		check(sp.satisfied and not main.parts.has("pepino"), "meterle el pepino a la estatua")
 		print("RESULTADO: ", "OK" if ok else "FALLOS")
 		return true
 	return false

@@ -5,16 +5,17 @@ Compatibilidad: el PC del usuario no aguanta Forward+). Todo el mundo se genera 
 arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en español neutro.
 
 - Mapa: `data/town.json`, generado desde `data/map.osm` con
-  `python3 tools/osm_to_json.py data/map.osm data/map_sur.osm data/map_pueblo.osm data/town.json --crop=-175,60,262,560 --start "Chiqui" --tanatorio data/tanatorio.osm --backdrop=-1300,-450,900,980`.
+  `python3 tools/osm_to_json.py data/map.osm data/map_sur.osm data/map_pueblo.osm data/town.json --crop=-175,60,262,560 --start "Chiqui" --tanatorio data/tanatorio.osm --backdrop=-1300,-450,900,1060`.
 - Bar Chiqui (zona de inicio = todo el bar, 15x22 m como en OSM): `scripts/bar_chiqui.gd`,
   coordenadas locales (+Z = avenida). Ventanas W1-W6 en el perímetro; se descartan solas si
   dan contra otra casa. Única salida: la verja (BuyDoor estilo "gate").
 - Zonas (WaW): `scripts/zones.gd` cierra las calles jugables (`PLAYABLE`/`PLAYABLE_AREAS` del
   conversor) con tapias y escombros; entre zonas hay BuyDoor estilo "debris" (avenida → lantica,
-  poli, plaza). Los spawns de calle solo se usan si su zona está abierta.
+  instituto, poli, plaza; L'Antica es parte de la avenida y se compra su puerta). Los spawns de
+  calle solo se usan si su zona está abierta.
 - Edificios con interior en `scripts/interiors.gd` (`shell()` = caja hueca con huecos de puerta):
-  bazar chino (pieza "canon"), L'Antica (pieza "tele"), polideportivo (garita bajo las gradas,
-  pieza "calzoncillo"), Ayuntamiento + mesa de trabajo (grupo "workbench") y decoración de la
+  bazar chino (pieza "canon"), L'Antica (al entrar sale el Panzer, que suelta la "tele"),
+  polideportivo, Ayuntamiento + mesa de trabajo (grupo "workbench") y decoración de la
   Plaza Consistorial. Arma maravilla "zurraspa" (diseño de un colega del usuario): ráfaga
   de chorros que hace resbalar y ensucia (`apply_slip`/`apply_dirty` en zombie.gd) y deja charcos
   (`scripts/zurraspa_puddle.gd`). Versión Pack-a-Punch "zurraspa_pap": avalancha
@@ -29,16 +30,19 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   pueblo al entrar. El cementerio NO se modela ni se puede visitar (petición del usuario).
 - Resto del pueblo de fondo (`scripts/backdrop.gd`, clave "backdrop"): casas y calles sencillas
   fuera del recorte, fusionadas por bloques de 100 m, sin colisión, visibility_range 300 m.
-- Autobús 726 (`scripts/bus.gd`): línea circular con 5 paradas (BUS_STOPS del conversor:
-  avenida, instituto, suroeste/Calle Hadar, norte/Calle Encinas, este/Av. Virgen del Espinar).
-  Ruta = BUS_ROUTE a mano (avenida→instituto) + camino más corto por OSM entre paradas.
-  AnimatableBody3D en capa 16; en marcha el viajero solo choca con el bus (collision_mask=16) y
-  atraviesa tapias/barreras con él. Donde la ruta corta tapones o escombros se pone una barrera
-  "SOLO BUS" (Bus.make_gate). Llegar a una parada abre su zona.
-- Paradas nuevas = "islands" de town.json: recuadros con detalle fuera del recorte principal
-  (calles jugables, casas, suelo, límites y su propia navmesh horneada con NavigationServer3D).
-  `town.in_detail(p)` sustituye a `bounds.has_point` en zonas, farolas y spawns.
+- Autobús 726 (`scripts/bus.gd`): circular con 3 paradas (BUS_STOPS del conversor: Bar Chiqui,
+  Instituto, Segundo Guada). Ruta = BUS_ROUTE a mano (Chiqui→instituto) + camino más corto por
+  OSM (→ Segundo Guada → BUS_RETURN_VIA → avenida por el oeste → Chiqui). En marcha el viajero
+  queda quieto (`player.riding_bus`) y `_carry` le aplica el movimiento del bus.
+  Barreras "SOLO BUS" (Bus.make_gate) donde la ruta corta tapones/escombros. Llegar abre la zona.
+- Segundo Guada = "island" de town.json (zona "segundo"): chalets de ladrillo retranqueados
+  con muro de jardín (zones._garden_wall), casa Calle Artes 22 (prefab "artes22", ventana del
+  pepino `scripts/ee_window.gd`) y portal al skatepark. `town.in_detail(p)`/`island_at(p)`.
   La navmesh grande tarda unos segundos en estar lista (los tests esperan a `_main_nav_ready`).
+- Skatepark (`scripts/skatepark.gd`): nivel aparte; "el colega" (zombie special "npc", cara en
+  assets/npc/cara.png) suelta el "calzoncillo"; con el pepino aparece la estatua del culo:
+  10 muertes cerca con "zurraspa_pap" y luego [F] para meterle el pepino. Especiales (panzer, npc)
+  no cuentan en la ronda (round_manager.spawn_special); zombies lejos/atascados reaparecen.
 - Edificios a mano sin interior (Sala Groove nº 6) en `scripts/landmarks.gd`; su posición
   aproximada está en `EXTRA_PREFABS` de `tools/osm_to_json.py`. Plazuelas (acera ensanchada)
   delante de Casa de la Juventud y Hogar del Mayor.

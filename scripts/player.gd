@@ -60,6 +60,7 @@ var flash_t := 0.0
 var slide: Node3D
 var heartbeat_cd := 0.0
 var puddle_cd := 0.0
+var riding_bus := false        # en el autobús en marcha: lo mueve el bus
 var nuclear_cd := 0.0          # Defecación Nuclear (cañón dorado)
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
@@ -316,6 +317,9 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= gravity * delta
+	if riding_bus:
+		velocity = Vector3.ZERO
+		return
 	if dead or downed:
 		velocity.x = 0.0
 		velocity.z = 0.0

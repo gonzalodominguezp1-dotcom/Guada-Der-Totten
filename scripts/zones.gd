@@ -57,6 +57,7 @@ static func build(town) -> void:
 				n = -n
 			_line(town, holder, rng, a + n * 0.3, dir, n, 0.0, L, -1, ai)
 	_build_fence_bars(holder)
+	_fence_xf.clear()
 	# 3) tapones al final de las calles jugables que siguen sin serlo
 	for pi in town.playable.size():
 		var pl: Dictionary = town.playable[pi]
@@ -115,7 +116,9 @@ static func _line(town, holder: Node3D, rng: RandomNumberGenerator, start: Vecto
 			var tb: float = kinds[j][0] + STEP * 0.5
 			var a := start + dir * ta
 			var b := start + dir * tb
-			if k == "wall":
+			if k == "wall" and town.island_at((a + b) * 0.5) == "segundo":
+				_garden_wall(town, holder, a, b)
+			elif k == "wall":
 				_tapia(town, holder, rng, a, b)
 			elif _near_route(town, (a + b) * 0.5, 5.0):
 				Bus.make_gate(town, (a + b) * 0.5, Vector2(-dir.y, dir.x), tb - ta + 0.8)
@@ -270,8 +273,10 @@ static func _tapia(town, holder: Node3D, rng: RandomNumberGenerator, a: Vector2,
 
 ## Valla de barrotes verdes (como la del instituto): murete, pasamanos y
 ## barrotes (todos juntos en un MultiMesh al final). Bloquea el paso, no la vista.
-static var _fence_xf: Array = []
+static var _fence_xf: Array = []       # valla verde de jardín
+static var _fence_black: Array = []    # valla negra de forja (colegios)
 static var _fence_mat: StandardMaterial3D
+static var _fence_black_mat: StandardMaterial3D
 
 
 static func _fence(_town, holder: Node3D, a: Vector2, b: Vector2) -> void:
@@ -283,15 +288,15 @@ static func _fence(_town, holder: Node3D, a: Vector2, b: Vector2) -> void:
 	var yaw := atan2(-dir.y, dir.x)
 	var bas := Basis(Vector3.UP, yaw)
 	var mid := (a + b) * 0.5
-	_fence_xf.append(Transform3D(bas.scaled(Vector3(L, 0.35, 0.3)), Vector3(mid.x, 0.175, mid.y)))
+	_fence_black.append(Transform3D(bas.scaled(Vector3(L, 0.35, 0.3)), Vector3(mid.x, 0.175, mid.y)))
 	for y: float in [0.55, h - 0.05]:
-		_fence_xf.append(Transform3D(bas.scaled(Vector3(L, 0.05, 0.05)), Vector3(mid.x, y, mid.y)))
+		_fence_black.append(Transform3D(bas.scaled(Vector3(L, 0.05, 0.05)), Vector3(mid.x, y, mid.y)))
 	var t := 0.06
 	var k := 0
 	while t < L:
 		var p := a + dir * t
 		var w := 0.08 if k % 20 == 0 else 0.025
-		_fence_xf.append(Transform3D(bas.scaled(Vector3(w, h - 0.35, w)), Vector3(p.x, 0.35 + (h - 0.35) * 0.5, p.y)))
+		_fence_black.append(Transform3D(bas.scaled(Vector3(w, h - 0.35, w)), Vector3(p.x, 0.35 + (h - 0.35) * 0.5, p.y)))
 		t += 0.13
 		k += 1
 	var body := StaticBody3D.new()
@@ -305,7 +310,58 @@ static func _fence(_town, holder: Node3D, a: Vector2, b: Vector2) -> void:
 	body.add_child(cs)
 
 
+## Muro de jardín de los chalets (Segundo Guada): zócalo de piedra y valla
+## verde encima. La colisión es más alta que lo que se ve (cierra la zona).
+static func _garden_wall(town, holder: Node3D, a: Vector2, b: Vector2) -> void:
+	var L := a.distance_to(b)
+	if L < 0.3:
+		return
+	var dir := (b - a) / L
+	var yaw := atan2(-dir.y, dir.x)
+	var mid := (a + b) * 0.5
+	var col := Color(0.86, 0.76, 0.62)
+	col.a = float(1 * 64 + 0 * 16 + 7) / 255.0
+	var n := Vector2(-dir.y, dir.x)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for side in [1.0, -1.0]:
+		var o: Vector2 = n * 0.17 * side
+		var p0 := a + o
+		var p1 := b + o
+		town._quad(st, Vector3(p0.x, -0.1, p0.y), Vector3(p1.x, -0.1, p1.y), Vector3(p1.x, 0.9, p1.y), Vector3(p0.x, 0.9, p0.y),
+			Vector2(0, -0.1), Vector2(L, -0.1), Vector2(L, 0.9), Vector2(0, 0.9), Vector3(n.x * side, 0, n.y * side), Vector2(0, 0.9), col)
+	var body := StaticBody3D.new()
+	holder.add_child(body)
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = town.facade_mat
+	body.add_child(mi)
+	var bas := Basis(Vector3.UP, yaw)
+	_fence_xf.append(Transform3D(bas.scaled(Vector3(L, 0.08, 0.36)), Vector3(mid.x, 0.94, mid.y)))
+	for y: float in [1.15, 1.95]:
+		_fence_xf.append(Transform3D(bas.scaled(Vector3(L, 0.04, 0.04)), Vector3(mid.x, y, mid.y)))
+	var t := 0.1
+	while t < L:
+		var p := a + dir * t
+		_fence_xf.append(Transform3D(bas.scaled(Vector3(0.025, 1.0, 0.025)), Vector3(p.x, 1.48, p.y)))
+		t += 0.12
+	var cs := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(L, 2.6, 0.35)
+	cs.shape = shape
+	cs.position = Vector3(mid.x, 1.3, mid.y)
+	cs.rotation.y = yaw
+	body.add_child(cs)
+
+
 static func _build_fence_bars(holder: Node3D) -> void:
+	if _fence_black_mat == null:
+		_fence_black_mat = StandardMaterial3D.new()
+		_fence_black_mat.albedo_color = Color(0.04, 0.04, 0.045)
+		_fence_black_mat.roughness = 0.45
+		_fence_black_mat.metallic = 0.5
+	_multimesh(holder, _fence_black, _fence_black_mat)
+	_fence_black.clear()
 	if _fence_xf.is_empty():
 		return
 	if _fence_mat == null:
@@ -313,19 +369,25 @@ static func _build_fence_bars(holder: Node3D) -> void:
 		_fence_mat.albedo_color = Color(0.13, 0.42, 0.33)
 		_fence_mat.roughness = 0.5
 		_fence_mat.metallic = 0.3
+	_multimesh(holder, _fence_xf, _fence_mat)
+	_fence_xf.clear()
+
+
+static func _multimesh(holder: Node3D, xfs: Array, mat: Material) -> void:
+	if xfs.is_empty():
+		return
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	var bm := BoxMesh.new()
 	bm.size = Vector3.ONE
 	mm.mesh = bm
-	mm.instance_count = _fence_xf.size()
-	for i in _fence_xf.size():
-		mm.set_instance_transform(i, _fence_xf[i])
+	mm.instance_count = xfs.size()
+	for i in xfs.size():
+		mm.set_instance_transform(i, xfs[i])
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
-	mmi.material_override = _fence_mat
+	mmi.material_override = mat
 	holder.add_child(mmi)
-	_fence_xf.clear()
 
 
 ## Barricada de escombros y coches destrozados atravesando una calle

@@ -1,0 +1,6 @@
+Cara del "colega" del skatepark (el NPC que suelta el calzoncillo sucio).
+
+Pon aquí una foto de la cara, recortada y de frente, con el nombre:
+    cara.png
+(mejor cuadrada o un poco más alta que ancha, por ejemplo 256x300 px).
+Al abrir el juego, Godot la importa sola y se pone en la cabeza del NPC.

@@ -377,10 +377,36 @@ static func lantica(root: Node3D, town) -> void:
 		for b in 14:
 			L._cyl(root, Vector3(2.4 + b * 0.32, 1.25 + k * 0.5, -9.4), 0.035, 0.04, 0.3,
 				_m(Color.from_hsv(rng.randf_range(0.0, 0.35), 0.7, rng.randf_range(0.2, 0.6), 0.85), 0.1), Vector3.ZERO, 8)
-	var part := PartPickup.new()
-	part.part = "tele"
-	root.add_child(part)
-	part.position = Vector3(3.8, 1.18, -7.6)
+	# la puerta se compra; al entrar sale el Panzer, que suelta la tele al morir
+	var door := BuyDoor.new()
+	door.cost = 1000
+	door.label = "entrar en L'Antica"
+	door.size = Vector3(1.6, 2.6, 0.08)
+	door.style = "wood"
+	root.add_child(door)
+	door.position = Vector3(door_t - w * 0.5, 1.3, 0.0)
+	var trig := Area3D.new()
+	trig.name = "TriggerPanzer"
+	trig.collision_layer = 0
+	trig.collision_mask = 2
+	var tcs := CollisionShape3D.new()
+	var tsh := BoxShape3D.new()
+	tsh.size = Vector3(w - 1.5, 2.5, d - 1.5)
+	tcs.shape = tsh
+	tcs.position = Vector3(0, 1.25, -d * 0.5)
+	trig.add_child(tcs)
+	root.add_child(trig)
+	trig.body_entered.connect(func(b):
+		if trig.get_meta("done", false) or not b.is_in_group("player"):
+			return
+		trig.set_meta("done", true)
+		var scene = trig.get_tree().current_scene
+		if scene and scene.get("rounds"):
+			scene.rounds.spawn_special("panzer", root.to_global(Vector3(-5.0, 0.0, -7.5)))
+			if scene.hud:
+				scene.hud.announce("¡PANZER!")
+			Sfx.play("nuclear", -8.0, 0.6)
+	)
 	# horno de leña en la esquina del fondo
 	var dome := MeshInstance3D.new()
 	var dm := SphereMesh.new()
@@ -532,10 +558,7 @@ static func polideportivo(root: Node3D, town) -> void:
 	L._box(root, Vector3(19.9, 0.95, -d + 0.6), Vector3(0.3, 0.18, 0.15), _m(Color(0.15, 0.15, 0.15), 0.5))
 	L._box(root, Vector3(21.8, 1.6, -d + 0.4), Vector3(0.8, 0.6, 0.04), _m(Color(0.6, 0.45, 0.3), 0.7))
 	_light(root, Vector3(19.5, 2.3, -d + 2.4), Color(1.0, 0.9, 0.7), 0.6, 4.0)
-	var part := PartPickup.new()
-	part.part = "calzoncillo"
-	root.add_child(part)
-	part.position = Vector3(20.9, 0.85, -d + 0.7)
+	# (el calzoncillo ahora lo suelta el colega del skatepark)
 	# canastas en las paredes laterales
 	for hx in [-hw + 0.5, hw - 0.5]:
 		var s := 1.0 if hx > 0 else -1.0
@@ -792,10 +815,9 @@ static func instituto(root: Node3D, town) -> void:
 	lining.set_shader_parameter("upper", Color(0.88, 0.87, 0.82))
 	lining.set_shader_parameter("lower", Color(0.42, 0.5, 0.62))
 	shell(root, town, {"w": w, "d": block_d, "h": stone_h, "kind": 1, "style": 1, "tint": Color(0.86, 0.8, 0.7),
-		"seed": 9, "windows": false, "roof": "none", "lining": lining, "ceil_h": 3.4,
+		"seed": 9, "windows": false, "roof": "hip", "lining": lining, "ceil_h": 3.4,
 		"doors": [{"face": "front", "t0": w * 0.5 - 3.2, "t1": w * 0.5 - 0.6, "h": 2.8}]})
 	_floor(root, Vector3(0, 0.02, -block_d * 0.5), Vector2(w - 0.6, block_d - 0.6), tile)
-	L._box(root, Vector3(0, stone_h + 0.1, -block_d * 0.5), Vector3(w + 0.2, 0.2, block_d + 0.2), _m(Color(0.55, 0.55, 0.55), 0.8))
 	# cristalera y puertas abiertas de la entrada
 	var glass := _m(Color(0.1, 0.13, 0.15), 0.1, 0.3)
 	var frame := _m(Color(0.6, 0.62, 0.64), 0.4, 0.6)
@@ -821,7 +843,11 @@ static func instituto(root: Node3D, town) -> void:
 	var wing := Node3D.new()
 	wing.position = Vector3(0, 0, -block_d)
 	root.add_child(wing)
-	L._facade_box(wing, town, w - 1.2, 67.9 - block_d, 7.2, 2, 1, Color(0.72, 0.38, 0.26), 4)
+	# ala de enlucido beige con tejado de teja (como en las fotos)
+	L._facade_box(wing, town, w - 1.2, 67.9 - block_d, 7.2, 0, 1, Color(0.88, 0.76, 0.6), 4)
+	var pier := _soft(town, Color(0.62, 0.55, 0.45), 0.9, 1.2)
+	for x in [-(w - 1.2) * 0.5, (w - 1.2) * 0.5]:
+		L._box(wing, Vector3(1.0, 7.2, 1.0), Vector3(x, 3.6, -(67.9 - block_d) + 0.4), pier)
 	for k in 6:
 		var ac := L._box(wing, Vector3(w * 0.5 - 0.45, 4.6 + (k % 2) * 2.2, -6.0 - k * 8.5), Vector3(0.5, 0.6, 0.9), _m(Color(0.86, 0.86, 0.84), 0.6))
 		ac.name = "aire"
@@ -878,3 +904,82 @@ static func colegio(root: Node3D, town) -> void:
 	L._box(root, Vector3(0, 3.2, 0.12), Vector3(w, 0.25, 0.25), _m(Color(0.78, 0.7, 0.55), 0.8))
 	var plaque := L._box(root, Vector3(-6.0, 2.6, 0.2), Vector3(3.4, 0.5, 0.05), _m(Color(0.95, 0.95, 0.93), 0.6))
 	L._label(plaque, "CEIP Alejandro Rubio", Vector3(0, 0, 0.03), 44, Color(0.15, 0.25, 0.55), 0.0045)
+	# porche del patio: cercha verde, borde rojo y pilares de colores
+	var truss := _m(Color(0.2, 0.42, 0.25), 0.5, 0.4)
+	var red := _m(Color(0.7, 0.12, 0.1), 0.6)
+	var pcols := [Color(0.2, 0.3, 0.8), Color(0.55, 0.3, 0.75), Color(0.9, 0.45, 0.1), Color(0.85, 0.2, 0.2), Color(0.2, 0.6, 0.3)]
+	var x0 := -12.0
+	var k := 0
+	while x0 <= 12.0:
+		L._cyl(root, Vector3(x0, 1.5, 4.5), 0.09, 0.09, 3.0, _m(pcols[k % pcols.size()], 0.5))
+		var diag := L._box(root, Vector3(0.05, 0.05, 4.8), Vector3(x0, 3.1, 2.3), truss)
+		diag.rotation.x = 0.12
+		x0 += 3.0
+		k += 1
+	L._box(root, Vector3(25.0, 0.12, 4.8), Vector3(0, 3.35, 2.3), _m(Color(0.75, 0.76, 0.74), 0.6, 0.3))
+	L._box(root, Vector3(25.2, 0.25, 0.1), Vector3(0, 3.3, 4.7), red)
+	L._box(root, Vector3(25.0, 0.06, 0.06), Vector3(0, 3.0, 4.6), truss)
+	# vallas de colores del patio infantil
+	var fcols := [Color(0.15, 0.3, 0.85), Color(0.85, 0.15, 0.2), Color(0.15, 0.6, 0.25), Color(0.95, 0.8, 0.1)]
+	for j in 8:
+		var fx := -11.0 + j * 3.1
+		var fc: Material = _m(fcols[j % fcols.size()], 0.5, 0.3)
+		for y in [0.1, 1.5]:
+			L._box(root, Vector3(3.0, 0.06, 0.06), Vector3(fx, y, 6.2), fc)
+		for xx in [fx - 1.5, fx + 1.5]:
+			L._box(root, Vector3(0.06, 1.5, 0.06), Vector3(xx, 0.8, 6.2), fc)
+		var mm := _m(fcols[j % fcols.size()], 0.6)
+		mm.albedo_color.a = 0.25
+		mm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		L._box(root, Vector3(2.9, 1.35, 0.02), Vector3(fx, 0.8, 6.2), mm)
+
+
+# ---------------------------------------------------------------- Calle Artes 22 (Segundo Guada)
+
+static func artes22(root: Node3D, town) -> void:
+	var w := 11.0
+	var setback := 3.5
+	var house := Node3D.new()
+	house.position = Vector3(0, 0, -setback)
+	root.add_child(house)
+	L._facade_box(house, town, w, 7.0, 6.2, 2, 1, Color(0.78, 0.45, 0.32), 9)
+	var white := _m(Color(0.93, 0.93, 0.92), 0.5)
+	for x in [-3.0, -0.2]:
+		L._box(house, Vector3(2.4, 2.2, 0.08), Vector3(x, 1.1, 0.04), white)     # portones del garaje
+		for k in 5:
+			L._box(house, Vector3(2.35, 0.03, 0.1), Vector3(x, 0.3 + k * 0.4, 0.06), _m(Color(0.8, 0.8, 0.8)))
+	L._box(house, Vector3(w + 0.6, 0.12, 1.0), Vector3(0, 3.1, 0.4), _m(Color(0.35, 0.18, 0.1), 0.7))   # tejadillo
+	# la ventana del pepino (piso de arriba)
+	var win = load("res://scripts/ee_window.gd").new()
+	win.name = "VentanaPepino"
+	house.add_child(win)
+	win.position = Vector3(2.6, 4.5, 0.08)
+	# jardín delantero: murete de piedra con valla verde y puerta
+	var stone := _soft(town, Color(0.72, 0.6, 0.48), 0.9, 1.2)
+	var green := _m(Color(0.13, 0.42, 0.33), 0.5, 0.3)
+	for seg in [[-w * 0.5, 2.6], [3.8, w * 0.5]]:
+		var L0: float = seg[1] - seg[0]
+		var cx: float = (seg[0] + seg[1]) * 0.5
+		L._box(root, Vector3(L0, 0.9, 0.35), Vector3(cx, 0.45, -0.2), stone, true)
+		var t := 0.1
+		while t < L0:
+			L._box(root, Vector3(0.025, 1.0, 0.025), Vector3(seg[0] + t, 1.4, -0.2), green)
+			t += 0.12
+		L._box(root, Vector3(L0, 0.04, 0.04), Vector3(cx, 1.9, -0.2), green)
+	var gate := L._box(root, Vector3(1.2, 1.8, 0.05), Vector3(3.2, 0.9, -0.2), _m(Color(0.1, 0.12, 0.1), 0.5, 0.4))
+	gate.name = "cancela"
+	var plate := L._box(root, Vector3(0.35, 0.25, 0.04), Vector3(4.2, 1.2, -0.0), _m(Color(0.9, 0.88, 0.82)))
+	L._label(plate, "22", Vector3(0, 0, 0.03), 48, Color(0.1, 0.1, 0.1), 0.004)
+	L._box(root, Vector3(0.3, 0.3, 0.2), Vector3(4.2, 1.5, -0.1), _m(Color(0.15, 0.3, 0.15)))       # buzón
+	# portal al skatepark, en la calle a unos metros de la casa
+	var portal := Portal.new()
+	portal.master = true
+	portal.cost = 1000
+	portal.zone_name = "skatepark"
+	portal.label_text = "SKATEPARK"
+	portal.town = town
+	portal.name = "PortalSegundo"
+	root.add_child(portal)
+	portal.position = Vector3(-10.0, 0.0, 3.8)
+	portal.rotation.y = -PI * 0.5
+	town.portal_segundo = portal
