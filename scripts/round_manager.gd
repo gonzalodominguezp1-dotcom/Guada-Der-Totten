@@ -140,6 +140,8 @@ func on_zombie_died(z) -> void:
 	if z.special != "":
 		# los especiales no cuentan en la ronda; sueltan su pieza
 		var part: String = {"panzer": "tele", "npc": "calzoncillo"}.get(z.special, "")
+		if z.special == "npc" and z.stripped:
+			part = ""
 		if part != "":
 			var pp = load("res://scripts/part_pickup.gd").new()
 			pp.part = part

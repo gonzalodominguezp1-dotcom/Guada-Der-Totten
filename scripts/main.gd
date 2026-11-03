@@ -115,6 +115,17 @@ func set_tanatorio_mood(on: bool) -> void:
 		mood_tween.tween_property(env, k, target[k], 1.5)
 
 
+## Niebla espesa durante los trayectos del autobús (tapa el pueblo de fondo)
+func set_travel_fog(on: bool) -> void:
+	if in_tanatorio:
+		return
+	if mood_tween:
+		mood_tween.kill()
+	mood_tween = create_tween().set_parallel(true)
+	var dens: float = base_mood["fog_density"]
+	mood_tween.tween_property(env, "fog_density", maxf(dens * 3.5, 0.05) if on else dens, 2.0)
+
+
 # ---------------------------------------------------------------- power-ups
 
 func collect_part(part: String) -> void:

@@ -979,4 +979,11 @@ static func artes22(root: Node3D, town) -> void:
 	root.add_child(portal)
 	portal.position = Vector3(-10.0, 0.0, 3.8)
 	portal.rotation.y = -PI * 0.5
+	# la calle está en cuesta: subirlo al suelo real (portal y punto de salida)
+	var rt := Transform3D(Basis(Vector3.UP, root.rotation.y), root.position)
+	var top := -1e9
+	for lp in [Vector3.ZERO, Vector3(0, 0, 2.6), Vector3(0, 0, -1.0)]:
+		var wp: Vector3 = rt * (portal.transform * lp)
+		top = maxf(top, town.gy(Vector2(wp.x, wp.z)))
+	portal.position.y = top - root.position.y + 0.02
 	town.portal_segundo = portal

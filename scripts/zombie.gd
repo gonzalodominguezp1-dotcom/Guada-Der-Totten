@@ -63,6 +63,7 @@ var repath := 0.0
 var moan_cd := 0.0
 var head_tilt := 0.0
 var special := ""            # "" normal, "panzer" (L'Antica) o "npc" (skatepark)
+var stripped := false        # npc: ya le has quitado los calzoncillos
 var attack_damage := ATTACK_DAMAGE
 var stuck_t := 0.0
 var progress_t := 0.0
@@ -80,6 +81,8 @@ var stink: CPUParticles3D
 
 func _ready() -> void:
 	add_to_group("zombies")
+	if special == "npc":
+		add_to_group("interactables")
 	health = max_health
 	collision_layer = 4
 	collision_mask = 1 | 2 | 4 | 8 | 16
@@ -127,6 +130,27 @@ func _rise() -> void:
 	tw.tween_callback(_end_rise)
 	# tierra que salta
 	_dust()
+
+
+## El colega del skatepark: [F] para quitarle los calzoncillos
+func can_interact(p) -> bool:
+	return special == "npc" and not dead and not stripped and global_position.distance_to(p.global_position) < 2.6
+
+
+func get_prompt(_p) -> String:
+	return "[F] Quitarle los calzoncillos al colega"
+
+
+func is_hold() -> bool:
+	return false
+
+
+func interact(_p) -> void:
+	stripped = true
+	var scene = get_tree().current_scene
+	if scene and scene.has_method("collect_part"):
+		scene.collect_part("calzoncillo")
+	Sfx.play("part_pickup", -2.0)
 
 
 func _end_rise() -> void:
@@ -554,10 +578,15 @@ func _physics_process(delta: float) -> void:
 				if dist < 2.2:
 					move_dir = to_player.normalized()
 		State.WANDER:
-			var away := -to_player.normalized() if dist > 0.1 else Vector3.FORWARD
-			if dist < 14.0:
-				move_dir = _nav_dir(global_position + away * 6.0, delta)
-				spd = speed * 0.8
+			if special == "npc":
+				# el colega se queda quieto mirándote
+				if dist < 10.0 and dist > 0.1:
+					_face(to_player.normalized(), delta)
+			else:
+				var away := -to_player.normalized() if dist > 0.1 else Vector3.FORWARD
+				if dist < 14.0:
+					move_dir = _nav_dir(global_position + away * 6.0, delta)
+					spd = speed * 0.8
 
 	if move_dir.length() > 0.01 and state != State.TEARING:
 		_face(move_dir, delta)

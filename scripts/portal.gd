@@ -191,6 +191,9 @@ func teleport(player) -> void:
 	cd = COOLDOWN
 	other.cd = COOLDOWN
 	var exit: Vector3 = other.global_transform * Vector3(0, 0.1, 2.6)
+	# en el pueblo con cuesta: nunca por debajo del suelo
+	if town and town.has_method("in_detail") and town.in_detail(Vector2(exit.x, exit.z)):
+		exit.y = maxf(exit.y, town.gy(Vector2(exit.x, exit.z)) + 0.3)
 	player.global_position = exit
 	player.velocity = Vector3.ZERO
 	var fwd: Vector3 = other.global_transform.basis.z

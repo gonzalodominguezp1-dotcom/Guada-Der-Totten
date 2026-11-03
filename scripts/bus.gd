@@ -13,10 +13,10 @@ enum State { WAITING, DRIVING }
 const LEN := 12.0
 const WID := 2.5
 const FLOOR_Y := 0.28
-const WAIT := 15.0
-const CRUISE := 10.0       # m/s dentro de las zonas (36 km/h)
-const FAST := 15.0         # m/s entre zonas, en la niebla (54 km/h)
-const SLOW := 4.0          # en curvas cerradas
+const WAIT := 12.0
+const CRUISE := 13.0       # m/s dentro de las zonas (47 km/h)
+const FAST := 26.0         # m/s entre zonas, en la niebla (94 km/h)
+const SLOW := 5.5          # en curvas cerradas
 const SIDE_OFF := 1.6      # se circula por la derecha
 const DOOR_FRONT := Vector2(-5.0, -3.7)   # z de la puerta delantera (lado derecho)
 const DOOR_MID := Vector2(-0.6, 0.7)
@@ -34,6 +34,7 @@ var v := 0.0
 var state := State.WAITING
 var wait_t := WAIT
 var speed_mult := 1.0                # para las pruebas
+var travel_fog := false
 var body: AnimatableBody3D
 var doors: Array = []                # [CollisionShape3D, MeshInstance3D]
 var kill_area: Area3D
@@ -453,7 +454,7 @@ func _physics_process(delta: float) -> void:
 					_depart()
 		State.DRIVING:
 			var tgt := _target_speed()
-			v = move_toward(v, tgt, (2.2 if tgt > v else 4.5) * dt)
+			v = move_toward(v, tgt, (3.5 if tgt > v else 6.0) * dt)
 			s += v * dt
 			var t0 := body.global_transform
 			var arrived := false
@@ -462,6 +463,12 @@ func _physics_process(delta: float) -> void:
 				arrived = true
 			_place(s)
 			_carry(t0, body.global_transform)
+			# niebla espesa en el trayecto (fuera de las zonas con detalle)
+			var fog := not riders.is_empty() and not town.in_detail(_pos(s), 15.0)
+			if fog != travel_fog:
+				travel_fog = fog
+				if game and game.has_method("set_travel_fog"):
+					game.set_travel_fog(fog)
 			if arrived:
 				_arrive()
 			for z in kill_area.get_overlapping_bodies():
@@ -535,6 +542,9 @@ func _arrive() -> void:
 			p.riding_bus = false
 			if p.hud:
 				p.hud.announce(str(st["name"]).to_upper())
+	if travel_fog and game and game.has_method("set_travel_fog"):
+		game.set_travel_fog(false)
+	travel_fog = false
 	if not riders.is_empty() and game and game.rounds:
 		game.rounds.relocate_zombies()
 	riders.clear()
