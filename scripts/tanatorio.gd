@@ -52,6 +52,7 @@ func _build() -> void:
 	_greenery()
 	_lamps()
 	_mist()
+	_town_lights()
 	_spawns()
 	# portal de vuelta, en el aparcamiento mirando al edificio
 	portal = Portal.new()
@@ -100,15 +101,29 @@ func _static_box(parent: Node3D, center: Vector3, size: Vector3, mat: Material =
 # ---------------------------------------------------------------- suelo y caminos
 
 func _ground() -> void:
+	# al este el terreno se corta y cae hacia el valle (vistas al pueblo)
+	var ex := PLAY.end.x + 2.0
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(300, 300)
+	pm.size = Vector2(ex + 150.0, 300)
 	pm.subdivide_width = 12
 	pm.subdivide_depth = 12
 	var mi := MeshInstance3D.new()
 	mi.mesh = pm
 	mi.material_override = soil
+	mi.position.x = (ex - 150.0) * 0.5
 	nav.add_child(mi)
-	_static_box(nav, Vector3(0, -0.5, 0), Vector3(300, 1.0, 300))
+	_static_box(nav, Vector3((ex - 150.0) * 0.5, -0.5, 0), Vector3(ex + 150.0, 1.0, 300))
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var drop := [Vector3(ex, 0, -150), Vector3(ex + 170, -60, -150), Vector3(ex + 170, -60, 150), Vector3(ex, 0, 150)]
+	for k in [0, 2, 1, 0, 3, 2, 0, 1, 2, 0, 2, 3]:   # por las dos caras
+		st.set_normal(Vector3(0.33, 0.94, 0).normalized())
+		st.set_uv(Vector2(drop[k].x, drop[k].z) * 0.1)
+		st.add_vertex(drop[k])
+	var slope := MeshInstance3D.new()
+	slope.mesh = st.commit()
+	slope.material_override = soil
+	nav.add_child(slope)
 
 
 func _ribbon(st: SurfaceTool, pts: Array, width: float, y: float) -> void:
@@ -376,7 +391,28 @@ func _bounds() -> void:
 	_static_box(nav, Vector3(r.get_center().x, 3, r.end.y + 0.5), Vector3(r.size.x + 2, 6, 1))
 	_static_box(nav, Vector3(r.get_center().x, 3, r.position.y - 0.5), Vector3(r.size.x + 2, 6, 1))
 	# tapias bajas de piedra a los lados
-	_stone_wall(Vector2(r.end.x, -9.0), Vector2(r.end.x, r.end.y), 1.6)
+	# al este, pretil bajo con barandilla: mirador sobre el valle y el pueblo
+	_stone_wall(Vector2(r.end.x, -9.0), Vector2(r.end.x, r.end.y), 0.6)
+	var iron := StandardMaterial3D.new()
+	iron.albedo_color = Color(0.1, 0.1, 0.11)
+	iron.metallic = 0.6
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.05, 0.05, r.end.y + 9.0)
+	var hand := MeshInstance3D.new()
+	hand.mesh = bm
+	hand.material_override = iron
+	hand.position = Vector3(r.end.x, 1.1, (r.end.y - 9.0) * 0.5)
+	nav.add_child(hand)
+	var zz := -9.0
+	while zz <= r.end.y:
+		var post := MeshInstance3D.new()
+		var pb := BoxMesh.new()
+		pb.size = Vector3(0.05, 0.5, 0.05)
+		post.mesh = pb
+		post.material_override = iron
+		post.position = Vector3(r.end.x, 0.85, zz)
+		nav.add_child(post)
+		zz += 2.0
 	_stone_wall(Vector2(r.position.x, -4.5), Vector2(r.position.x, r.end.y), 1.6)
 	# el camino sigue al sur: coches abandonados
 	var rb := StaticBody3D.new()
@@ -440,7 +476,7 @@ func _greenery() -> void:
 	while z < PLAY.end.y:
 		_leafy(Vector3(-31.0 + rng.randf_range(-0.5, 0.5), 0, z))
 		z += rng.randf_range(6.0, 8.0)
-	for p in [Vector3(22.0, 0, 3.0), Vector3(24.0, 0, 18.0), Vector3(21.5, 0, 47.0), Vector3(-15.0, 0, 48.5), Vector3(12.0, 0, 48.0)]:
+	for p in [Vector3(22.0, 0, 3.0), Vector3(-15.0, 0, 48.5)]:
 		_cypress(p, rng.randf_range(6.0, 9.0))
 	# fuera de la zona jugable: monte con pinos para cerrar la vista
 	for k in 60:
@@ -449,6 +485,8 @@ func _greenery() -> void:
 		var p := Vector3(sin(a) * r, 0, 25.0 + cos(a) * r)
 		if p.z < -12.0 and absf(p.x) < 35.0:
 			continue   # nada sobre el cementerio
+		if p.x > 15.0 and p.z > -20.0:
+			continue   # a la derecha (este) se abren las vistas al pueblo
 		if rng.randf() < 0.5:
 			_cypress(p, rng.randf_range(9.0, 15.0))
 		else:
@@ -487,6 +525,89 @@ func _lamps() -> void:
 		if i == 2 or i == 4:
 			town.lamps.append({"light": l, "base": 1.3, "mode": "flicker" if i == 2 else "dying", "speed": 13.0})
 		i += 1
+
+
+## Vistas: las luces del pueblo abajo, a la derecha según se sale del portal.
+## Son las casas de verdad (distancia y altura del MDT), giradas para que el
+## pueblo quede hacia el este de este nivel. No les afecta la niebla.
+func _town_lights() -> void:
+	var src: Array = data.get("town_lights", [])
+	if src.is_empty():
+		return
+	var cen := Vector2.ZERO
+	var dym := 0.0
+	for l in src:
+		cen += Vector2(l[0], l[2])
+		dym += float(l[1])
+	cen /= src.size()
+	dym /= src.size()
+	var rot := Vector2(1.0, -0.25).angle() - cen.angle()   # el centro del pueblo, al este y un poco al norte
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	var qm := QuadMesh.new()
+	qm.size = Vector2(1, 1)
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(0.5, 0.0)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.billboard_keep_scale = true
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_texture = gt
+	m.vertex_color_use_as_albedo = true
+	m.disable_fog = true
+	m.no_depth_test = false
+	qm.material = m
+	mm.mesh = qm
+	mm.instance_count = src.size()
+	var r := RandomNumberGenerator.new()
+	r.seed = 11
+	for i in src.size():
+		var l: Array = src[i]
+		# distancias a la mitad y el valle "aplanado" para que se vea por encima de la tapia
+		var p := Vector2(l[0], l[2]).rotated(rot) * 0.5
+		var d := p.length()
+		var y := -22.0 + clampf((float(l[1]) - dym) * 0.3, -8.0, 10.0)
+		var s := clampf(d * 0.008, 1.5, 7.0) * r.randf_range(0.7, 1.3)
+		mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(s, s, s)), Vector3(p.x, y, p.y)))
+		var warm := r.randf() < 0.8
+		mm.set_instance_color(i, (Color(1.0, 0.72, 0.35) if warm else Color(0.8, 0.9, 1.0)) * r.randf_range(0.5, 1.0))
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
+	# resplandor anaranjado sobre el pueblo
+	var glow := MeshInstance3D.new()
+	var gq := QuadMesh.new()
+	gq.size = Vector2(1300, 120)
+	glow.mesh = gq
+	var gm := StandardMaterial3D.new()
+	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	gm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	var g2 := Gradient.new()
+	g2.set_color(0, Color(1.0, 0.55, 0.2, 0.22))
+	g2.set_color(1, Color(1.0, 0.55, 0.2, 0.0))
+	var gt2 := GradientTexture2D.new()
+	gt2.gradient = g2
+	gt2.fill = GradientTexture2D.FILL_RADIAL
+	gt2.fill_from = Vector2(0.5, 1.0)
+	gt2.fill_to = Vector2(0.5, 0.5)
+	gm.albedo_texture = gt2
+	gm.disable_fog = true
+	glow.material_override = gm
+	var c2 := cen.rotated(rot) * 0.55
+	glow.position = Vector3(c2.x, 20.0, c2.y)
+	glow.rotation.y = atan2(c2.x, c2.y) + PI
+	add_child(glow)
 
 
 ## Niebla baja: grandes copos translúcidos que se arrastran por el suelo

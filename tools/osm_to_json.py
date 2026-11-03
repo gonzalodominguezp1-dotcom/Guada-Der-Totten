@@ -221,6 +221,7 @@ def main():
     ap.add_argument("files", nargs="+", help="uno o más .osm y, al final, el .json de salida")
     ap.add_argument("--tanatorio", help=".osm del tanatorio (nivel aparte, se llega por el portal)")
     ap.add_argument("--backdrop", help="X0,Z0,X1,Z1: resto del pueblo, solo de fondo (bajo detalle, sin colisión)")
+    ap.add_argument("--dem", help="MDT del IGN (GeoTIFF ETRS89 UTM30, p. ej. PNOA_MDT05): relieve -> data/terrain.bin")
     ap.add_argument("--crop", help="X0,Z0,X1,Z1 en metros desde el centro de la exportación")
     ap.add_argument("--start", default="", help="nombre del lugar de inicio")
     ap.add_argument("--no-fill", action="store_true")
@@ -458,6 +459,9 @@ def main():
         out["backdrop"] = backdrop_json(ways, nodes, proj, rel, detail_rects,
                                         tuple(float(v) for v in args.backdrop.split(",")), rng)
         print(f"Fondo: {len(out['backdrop']['buildings'])} casas, {len(out['backdrop']['streets'])} tramos de calle")
+    if args.dem and args.backdrop:
+        out["terrain"] = terrain_export(args.dem, args.dst, lat0, lon0, kx, kz, ox, oz,
+                                        tuple(float(v) for v in args.backdrop.split(",")), out)
     out["islands"] = [{"zone": z, "rect": [rel([r[0], r[1]]), rel([r[2], r[3]])]} for z, r in islands]
     out["bus_route"] = [rel(p) for p in route]
     out["bus_stops"] = stops
@@ -543,6 +547,69 @@ NO_FILL_AREAS = [
     [[-30.2, 437.4], [10.9, 482.7], [67.7, 513.9], [60.5, 528.0], [50.0, 548.7], [46.3, 556.3], [37.0, 573.9],
      [25.7, 596.3], [-15.0, 570.2], [-47.7, 558.3], [-63.2, 543.6], [-49.0, 523.0], [-33.4, 511.8], [-62.7, 463.3]],
 ]
+
+
+# ------------------------------------------------------------------ relieve
+
+TERRAIN_STEP = 5.0
+TERRAIN_REF = [-38.0, 132.0]   # Bar Chiqui: altura 0 del juego
+
+
+def terrain_export(dem_path, dst, lat0, lon0, kx, kz, ox, oz, rect, out):
+    """Muestrea el MDT en una rejilla (coordenadas del juego) y la guarda en
+    terrain.bin (float32, alturas relativas al Bar Chiqui). Necesita numpy y PIL."""
+    import os
+    import numpy as np
+    from PIL import Image
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("utm30", os.path.join(os.path.dirname(__file__), "utm30.py"))
+    utm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(utm)
+    im = Image.open(dem_path)
+    dem = np.array(im, dtype=np.float32)
+    tie = im.tag_v2.get(33922)
+    scale = im.tag_v2.get(33550)
+    e0, n0, px = tie[3], tie[4], scale[0]
+
+    def h_orig(x, z):
+        E, N = utm.ll_to_utm30(lat0 - z / kz, lon0 + x / kx)
+        c = (E - e0) / px - 0.5
+        r = (n0 - N) / px - 0.5
+        c0, r0 = int(c), int(r)
+        fc, fr = c - c0, r - r0
+        v = dem[r0:r0 + 2, c0:c0 + 2]
+        return float(v[0, 0] * (1 - fc) * (1 - fr) + v[0, 1] * fc * (1 - fr) + v[1, 0] * (1 - fc) * fr + v[1, 1] * fc * fr)
+
+    ref = h_orig(*TERRAIN_REF)
+    nx = int((rect[2] - rect[0]) / TERRAIN_STEP) + 1
+    nz = int((rect[3] - rect[1]) / TERRAIN_STEP) + 1
+    grid = np.zeros((nz, nx), dtype=np.float32)
+    for j in range(nz):
+        for i in range(nx):
+            grid[j, i] = h_orig(rect[0] + i * TERRAIN_STEP, rect[1] + j * TERRAIN_STEP) - ref
+    path = os.path.join(os.path.dirname(dst), "terrain.bin")
+    grid.astype("<f4").tofile(path)
+    # tanatorio: dónde está de verdad y luces del pueblo vistas desde allí
+    tan = out.get("tanatorio")
+    if tan and tan.get("latlon"):
+        la, lo = tan["latlon"]
+        tx, tz = (lo - lon0) * kx, -(la - lat0) * kz
+        th = h_orig(tx, tz) - ref
+        lights = []
+        bl = out.get("backdrop", {}).get("buildings", []) + out.get("buildings", [])
+        for k, b in enumerate(bl):
+            if k % 6:
+                continue
+            c = centroid(b["points"])
+            gx, gz = c[0] + ox, c[1] + oz
+            d = math.hypot(gx - tx, gz - tz)
+            if 250 < d < 1800:
+                lights.append([round(gx - tx, 1), round(h_orig(gx, gz) - ref - th + 4.0, 1), round(gz - tz, 1)])
+        tan["town_lights"] = lights
+        print(f"Tanatorio a {th:+.1f} m sobre el bar; {len(lights)} luces del pueblo a la vista")
+    print(f"Relieve: {nx} x {nz} puntos cada {TERRAIN_STEP:.0f} m (de {grid.min():+.1f} a {grid.max():+.1f} m) -> {path}")
+    return {"origin": [round(rect[0] - ox, 2), round(rect[1] - oz, 2)], "step": TERRAIN_STEP, "nx": nx, "nz": nz,
+            "file": "terrain.bin"}
 
 
 # ------------------------------------------------------------------ fondo
@@ -717,7 +784,7 @@ def tanatorio_json(src):
         la, lo = nodes[r]
         return [round((lo - lon0) * kx, 2), round(-(la - lat0) * kz, 2)]
 
-    out = {"building": [], "roads": [], "parking": [], "cemetery": []}
+    out = {"building": [], "roads": [], "parking": [], "cemetery": [], "latlon": [lat0, lon0]}
     for wid, tags, refs in ways:
         pts = [proj(r) for r in refs if r in nodes]
         if not pts or min(math.hypot(*p) for p in pts) > TANATORIO_RADIUS:

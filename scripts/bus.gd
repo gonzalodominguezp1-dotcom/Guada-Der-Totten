@@ -63,7 +63,7 @@ static func make_gate(t, pos: Vector2, dir: Vector2, width: float) -> void:
 	var g := StaticBody3D.new()
 	g.name = "BarreraBus"
 	t.nav_region.add_child(g)
-	g.position = Vector3(pos.x, 0, pos.y)
+	g.position = Vector3(pos.x, t.gy(pos), pos.y)
 	g.rotation.y = atan2(-dir.x, -dir.y)
 	var cs := CollisionShape3D.new()
 	var sh := BoxShape3D.new()
@@ -101,7 +101,7 @@ static func make_gate(t, pos: Vector2, dir: Vector2, width: float) -> void:
 	l.modulate = Color(0.1, 0.25, 0.6)
 	l.position = Vector3(0, 0, 0.03)
 	plate.add_child(l)
-	t.bus_gates.append({"arm": arm, "pos": Vector3(pos.x, 0, pos.y)})
+	t.bus_gates.append({"arm": arm, "pos": g.position})
 
 
 static func _bx(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
@@ -361,7 +361,7 @@ func _build_stop(k: int) -> void:
 	var st := StaticBody3D.new()
 	st.name = "Parada_" + str(stops[k]["zone"])
 	town.nav_region.add_child(st)
-	st.position = Vector3(c.x, 0, c.y)
+	st.position = Vector3(c.x, town.gy(c), c.y)
 	st.rotation.y = atan2(-d.x, -d.y)
 	var cs := CollisionShape3D.new()
 	var sh := BoxShape3D.new()
@@ -412,7 +412,12 @@ func _place(dist: float) -> void:
 	var b := _pos(dist + 3.5)
 	var c := _pos(dist)
 	var d := b - a
-	body.global_transform = Transform3D(Basis(Vector3.UP, atan2(-d.x, -d.y)), Vector3(c.x, 0.0, c.y))
+	# sube y baja las cuestas: altura en el centro e inclinación entre ruedas
+	var hf: float = town.gy(_pos(dist + 3.5))
+	var hb: float = town.gy(_pos(dist - 3.5))
+	var pitch := atan2(hf - hb, 7.0)
+	var bas := Basis(Vector3.UP, atan2(-d.x, -d.y)) * Basis(Vector3.RIGHT, pitch)
+	body.global_transform = Transform3D(bas, Vector3(c.x, (hf + hb) * 0.5, c.y))
 
 
 func _stop_s(k: int) -> float:

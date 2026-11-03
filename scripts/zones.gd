@@ -87,7 +87,7 @@ static func build(town) -> void:
 		town.nav_region.add_child(door)
 		var pos: Vector2 = zd["pos"]
 		var d: Vector2 = zd["dir"]
-		door.position = Vector3(pos.x, 1.4, pos.y)
+		door.position = Vector3(pos.x, 1.4 + town.gy(pos), pos.y)
 		door.rotation.y = atan2(-d.x, -d.y)
 		door.opened.connect(func(dr): town.open_zone(dr.zone))
 		town.zone_doors.append(door)
@@ -109,18 +109,26 @@ static func _line(town, holder: Node3D, rng: RandomNumberGenerator, start: Vecto
 		var j := i
 		while j + 1 < kinds.size() and kinds[j + 1][1] == k:
 			j += 1
-		if k == "fence":
-			_fence(town, holder, start + dir * (kinds[i][0] - STEP * 0.5), start + dir * (kinds[j][0] + STEP * 0.5))
+		if k == "fence" or k == "wall":
+			# por tramos de 4 m, para que escalonen siguiendo la cuesta
+			var fa: float = kinds[i][0] - STEP * 0.5
+			var fb: float = kinds[j][0] + STEP * 0.5
+			var nch := maxi(int(ceil((fb - fa) / 4.0)), 1) if not town.terrain.is_empty() else 1
+			for c in nch:
+				var a := start + dir * lerpf(fa, fb, float(c) / nch)
+				var b := start + dir * lerpf(fa, fb, float(c + 1) / nch)
+				if k == "fence":
+					_fence(town, holder, a, b)
+				elif town.island_at((a + b) * 0.5) == "segundo":
+					_garden_wall(town, holder, a, b)
+				else:
+					_tapia(town, holder, rng, a, b)
 		elif k != "open":
 			var ta: float = kinds[i][0] - STEP * 0.5
 			var tb: float = kinds[j][0] + STEP * 0.5
 			var a := start + dir * ta
 			var b := start + dir * tb
-			if k == "wall" and town.island_at((a + b) * 0.5) == "segundo":
-				_garden_wall(town, holder, a, b)
-			elif k == "wall":
-				_tapia(town, holder, rng, a, b)
-			elif _near_route(town, (a + b) * 0.5, 5.0):
+			if _near_route(town, (a + b) * 0.5, 5.0):
 				Bus.make_gate(town, (a + b) * 0.5, Vector2(-dir.y, dir.x), tb - ta + 0.8)
 			else:
 				_rubble(town, holder, rng, (a + b) * 0.5, dir, tb - ta + 0.8)
@@ -165,6 +173,10 @@ static func _classify(town, s: Vector2, n: Vector2, own_pl: int, own_area: int) 
 
 
 ## ¿Pasa la ruta del autobús cerca de este punto?
+static func _town_gy(town, p: Vector2) -> float:
+	return town.gy(p)
+
+
 static func _near_route(town, p: Vector2, dist: float) -> bool:
 	var r: PackedVector2Array = town.bus_route
 	for i in r.size() - 1:
@@ -232,6 +244,7 @@ static func _tapia(town, holder: Node3D, rng: RandomNumberGenerator, a: Vector2,
 	var n := Vector2(-dir.y, dir.x)
 	var h := rng.randf_range(2.3, 2.7)
 	var thick := 0.35
+	var yb: float = town.gy((a + b) * 0.5)
 	var r := rng.randf()
 	var kind := 1 if r < 0.55 else (0 if r < 0.85 else 2)
 	var tint := Color(0.86, 0.80, 0.66)
@@ -243,8 +256,8 @@ static func _tapia(town, holder: Node3D, rng: RandomNumberGenerator, a: Vector2,
 		var o: Vector2 = n * thick * 0.5 * side
 		var p0 := a + o
 		var p1 := b + o
-		town._quad(st, Vector3(p0.x, -0.1, p0.y), Vector3(p1.x, -0.1, p1.y), Vector3(p1.x, h, p1.y), Vector3(p0.x, h, p0.y),
-			Vector2(0, -0.1), Vector2(L, -0.1), Vector2(L, h), Vector2(0, h), Vector3(n.x * side, 0, n.y * side), Vector2(0, h), col)
+		town._quad(st, Vector3(p0.x, yb - 0.6, p0.y), Vector3(p1.x, yb - 0.6, p1.y), Vector3(p1.x, yb + h, p1.y), Vector3(p0.x, yb + h, p0.y),
+			Vector2(0, -0.6), Vector2(L, -0.6), Vector2(L, h), Vector2(0, h), Vector3(n.x * side, 0, n.y * side), Vector2(0, h), col)
 	var mesh := st.commit()
 	var body := StaticBody3D.new()
 	holder.add_child(body)
@@ -259,14 +272,14 @@ static func _tapia(town, holder: Node3D, rng: RandomNumberGenerator, a: Vector2,
 	cap.mesh = cm
 	cap.material_override = town.curb_mat
 	var mid := (a + b) * 0.5
-	cap.position = Vector3(mid.x, h + 0.06, mid.y)
+	cap.position = Vector3(mid.x, yb + h + 0.06, mid.y)
 	cap.rotation.y = atan2(-dir.y, dir.x)
 	body.add_child(cap)
 	var cs := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(L, h + 0.6, thick)
 	cs.shape = shape
-	cs.position = Vector3(mid.x, (h + 0.6) * 0.5, mid.y)
+	cs.position = Vector3(mid.x, yb + (h + 0.6) * 0.5, mid.y)
 	cs.rotation.y = atan2(-dir.y, dir.x)
 	body.add_child(cs)
 
@@ -279,7 +292,7 @@ static var _fence_mat: StandardMaterial3D
 static var _fence_black_mat: StandardMaterial3D
 
 
-static func _fence(_town, holder: Node3D, a: Vector2, b: Vector2) -> void:
+static func _fence(town, holder: Node3D, a: Vector2, b: Vector2) -> void:
 	var L := a.distance_to(b)
 	if L < 0.3:
 		return
@@ -288,15 +301,16 @@ static func _fence(_town, holder: Node3D, a: Vector2, b: Vector2) -> void:
 	var yaw := atan2(-dir.y, dir.x)
 	var bas := Basis(Vector3.UP, yaw)
 	var mid := (a + b) * 0.5
-	_fence_black.append(Transform3D(bas.scaled(Vector3(L, 0.35, 0.3)), Vector3(mid.x, 0.175, mid.y)))
+	var yb: float = town.gy(mid)
+	_fence_black.append(Transform3D(bas.scaled(Vector3(L, 0.6, 0.3)), Vector3(mid.x, yb + 0.05, mid.y)))
 	for y: float in [0.55, h - 0.05]:
-		_fence_black.append(Transform3D(bas.scaled(Vector3(L, 0.05, 0.05)), Vector3(mid.x, y, mid.y)))
+		_fence_black.append(Transform3D(bas.scaled(Vector3(L, 0.05, 0.05)), Vector3(mid.x, yb + y, mid.y)))
 	var t := 0.06
 	var k := 0
 	while t < L:
 		var p := a + dir * t
 		var w := 0.08 if k % 20 == 0 else 0.025
-		_fence_black.append(Transform3D(bas.scaled(Vector3(w, h - 0.35, w)), Vector3(p.x, 0.35 + (h - 0.35) * 0.5, p.y)))
+		_fence_black.append(Transform3D(bas.scaled(Vector3(w, h - 0.35, w)), Vector3(p.x, yb + 0.35 + (h - 0.35) * 0.5, p.y)))
 		t += 0.13
 		k += 1
 	var body := StaticBody3D.new()
@@ -305,7 +319,7 @@ static func _fence(_town, holder: Node3D, a: Vector2, b: Vector2) -> void:
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(L, h + 0.6, 0.3)
 	cs.shape = shape
-	cs.position = Vector3(mid.x, (h + 0.6) * 0.5, mid.y)
+	cs.position = Vector3(mid.x, yb + (h + 0.6) * 0.5, mid.y)
 	cs.rotation.y = yaw
 	body.add_child(cs)
 
@@ -319,6 +333,7 @@ static func _garden_wall(town, holder: Node3D, a: Vector2, b: Vector2) -> void:
 	var dir := (b - a) / L
 	var yaw := atan2(-dir.y, dir.x)
 	var mid := (a + b) * 0.5
+	var yb: float = town.gy(mid)
 	var col := Color(0.86, 0.76, 0.62)
 	col.a = float(1 * 64 + 0 * 16 + 7) / 255.0
 	var n := Vector2(-dir.y, dir.x)
@@ -328,8 +343,8 @@ static func _garden_wall(town, holder: Node3D, a: Vector2, b: Vector2) -> void:
 		var o: Vector2 = n * 0.17 * side
 		var p0 := a + o
 		var p1 := b + o
-		town._quad(st, Vector3(p0.x, -0.1, p0.y), Vector3(p1.x, -0.1, p1.y), Vector3(p1.x, 0.9, p1.y), Vector3(p0.x, 0.9, p0.y),
-			Vector2(0, -0.1), Vector2(L, -0.1), Vector2(L, 0.9), Vector2(0, 0.9), Vector3(n.x * side, 0, n.y * side), Vector2(0, 0.9), col)
+		town._quad(st, Vector3(p0.x, yb - 0.6, p0.y), Vector3(p1.x, yb - 0.6, p1.y), Vector3(p1.x, yb + 0.9, p1.y), Vector3(p0.x, yb + 0.9, p0.y),
+			Vector2(0, -0.6), Vector2(L, -0.6), Vector2(L, 0.9), Vector2(0, 0.9), Vector3(n.x * side, 0, n.y * side), Vector2(0, 0.9), col)
 	var body := StaticBody3D.new()
 	holder.add_child(body)
 	var mi := MeshInstance3D.new()
@@ -337,19 +352,19 @@ static func _garden_wall(town, holder: Node3D, a: Vector2, b: Vector2) -> void:
 	mi.material_override = town.facade_mat
 	body.add_child(mi)
 	var bas := Basis(Vector3.UP, yaw)
-	_fence_xf.append(Transform3D(bas.scaled(Vector3(L, 0.08, 0.36)), Vector3(mid.x, 0.94, mid.y)))
+	_fence_xf.append(Transform3D(bas.scaled(Vector3(L, 0.08, 0.36)), Vector3(mid.x, yb + 0.94, mid.y)))
 	for y: float in [1.15, 1.95]:
-		_fence_xf.append(Transform3D(bas.scaled(Vector3(L, 0.04, 0.04)), Vector3(mid.x, y, mid.y)))
+		_fence_xf.append(Transform3D(bas.scaled(Vector3(L, 0.04, 0.04)), Vector3(mid.x, yb + y, mid.y)))
 	var t := 0.1
 	while t < L:
 		var p := a + dir * t
-		_fence_xf.append(Transform3D(bas.scaled(Vector3(0.025, 1.0, 0.025)), Vector3(p.x, 1.48, p.y)))
+		_fence_xf.append(Transform3D(bas.scaled(Vector3(0.025, 1.0, 0.025)), Vector3(p.x, yb + 1.48, p.y)))
 		t += 0.12
 	var cs := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(L, 2.6, 0.35)
 	cs.shape = shape
-	cs.position = Vector3(mid.x, 1.3, mid.y)
+	cs.position = Vector3(mid.x, yb + 1.3, mid.y)
 	cs.rotation.y = yaw
 	body.add_child(cs)
 
@@ -393,7 +408,7 @@ static func _multimesh(holder: Node3D, xfs: Array, mat: Material) -> void:
 ## Barricada de escombros y coches destrozados atravesando una calle
 static func _rubble(town, holder: Node3D, rng: RandomNumberGenerator, c: Vector2, dir: Vector2, length: float) -> void:
 	var body := StaticBody3D.new()
-	body.position = Vector3(c.x, 0, c.y)
+	body.position = Vector3(c.x, town.gy(c), c.y)
 	body.rotation.y = atan2(-dir.y, dir.x)
 	holder.add_child(body)
 	var cs := CollisionShape3D.new()
@@ -494,7 +509,7 @@ static func compute_spawns(town) -> void:
 			for j in steps + 1:
 				var p := a.lerp(b, float(j) / steps)
 				if ok_point.call(p) and not town._in_any_building(p, 0.9):
-					town.spawn_points.append(Vector3(p.x, 0.05, p.y))
+					town.spawn_points.append(Vector3(p.x, 0.05 + town.gy(p), p.y))
 					town.spawn_zones.append(pl["zone"])
 	for ar in town.areas:
 		var poly: PackedVector2Array = ar["points"]
@@ -507,7 +522,7 @@ static func compute_spawns(town) -> void:
 			while z < r.end.y:
 				var p := Vector2(x, z)
 				if Geometry2D.is_point_in_polygon(p, poly) and not town._in_any_building(p, 1.0):
-					town.spawn_points.append(Vector3(p.x, 0.05, p.y))
+					town.spawn_points.append(Vector3(p.x, 0.05 + town.gy(p), p.y))
 					town.spawn_zones.append(ar["zone"])
 				z += 7.0
 			x += 7.0

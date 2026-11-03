@@ -29,7 +29,7 @@ static func build(town, data: Dictionary) -> void:
 		if not walls.has(key):
 			walls[key] = _st()
 			roofs[key] = _st()
-		_house(town, walls[key], roofs[key], pts, float(b["height"]), c, rng, _origin(key))
+		_house(town, walls[key], roofs[key], pts, float(b["height"]), c, rng, _origin(key) - Vector3(0, town.gy(c), 0))
 	for s in data.get("streets", []):
 		var pts: Array = s["points"]
 		var w: float = s["width"]
@@ -39,7 +39,9 @@ static func build(town, data: Dictionary) -> void:
 			var key := Vector2i(floori(a.x / BLOCK), floori(a.y / BLOCK))
 			if not roads.has(key):
 				roads[key] = _st()
-			_ribbon(town, roads[key], a, bb, w, _origin(key))
+			var nseg := maxi(int(a.distance_to(bb) / 8.0), 1)
+			for q in nseg:
+				_ribbon(town, roads[key], a.lerp(bb, float(q) / nseg), a.lerp(bb, float(q + 1) / nseg), w, _origin(key))
 	for key in walls:
 		_node(root, walls[key], town.facade_mat, key)
 		_node(root, roofs[key], town.dark_roof_mat if town.dark_roof_mat else town.roof_mat, key)
@@ -52,15 +54,35 @@ static func build(town, data: Dictionary) -> void:
 		var bb := Vector2(r[1][0], r[1][1])
 		var pm := PlaneMesh.new()
 		pm.size = bb - a
+		pm.subdivide_width = int((bb.x - a.x) / 20.0)
+		pm.subdivide_depth = int((bb.y - a.y) / 20.0)
 		var mi := MeshInstance3D.new()
-		mi.mesh = pm
+		mi.mesh = _displaced(town, pm, Vector3((a.x + bb.x) * 0.5, 0, (a.y + bb.y) * 0.5))
 		var m := StandardMaterial3D.new()
 		m.albedo_color = Color(0.3, 0.26, 0.22)
 		m.roughness = 1.0
 		mi.material_override = m
-		mi.position = Vector3((a.x + bb.x) * 0.5, -0.06, (a.y + bb.y) * 0.5)
+		mi.position = Vector3((a.x + bb.x) * 0.5, -0.12, (a.y + bb.y) * 0.5)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(mi)
+
+
+## Malla plana subdividida -> sigue el relieve (para el suelo de fondo)
+static func _displaced(town, pm: PlaneMesh, o: Vector3) -> ArrayMesh:
+	var arr := pm.get_mesh_arrays()
+	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	for i in verts.size():
+		var v := verts[i]
+		v.y = town.gy(Vector2(v.x + o.x, v.z + o.z))
+		verts[i] = v
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_NORMAL] = null
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	var st := SurfaceTool.new()
+	st.create_from(am, 0)
+	st.generate_normals()
+	return st.commit()
 
 
 static func _st() -> SurfaceTool:
@@ -105,7 +127,7 @@ static func _house(town, walls: SurfaceTool, roofs: SurfaceTool, pts: Array, h: 
 		var nrm := Vector3(e.z, 0, -e.x).normalized()
 		if nrm.dot((a + b) * 0.5 - cc) < 0.0:
 			nrm = -nrm
-		town._quad(walls, a + Vector3(0, -0.2, 0), b + Vector3(0, -0.2, 0), b + Vector3(0, h, 0), a + Vector3(0, h, 0),
+		town._quad(walls, a + Vector3(0, -3.0, 0), b + Vector3(0, -3.0, 0), b + Vector3(0, h, 0), a + Vector3(0, h, 0),
 			Vector2(0, -0.2), Vector2(L, -0.2), Vector2(L, h), Vector2(0, h), nrm, Vector2(L, h), col)
 		# faldón hasta el centro
 		var apex := cc + Vector3(0, h + 1.6, 0)
@@ -126,5 +148,5 @@ static func _ribbon(town, st: SurfaceTool, a: Vector2, b: Vector2, w: float, o: 
 	var p := [a - ext + n, b + ext + n, b + ext - n, a - ext - n]
 	var v := []
 	for q in p:
-		v.append(Vector3(q.x, 0.01, q.y) - o)
+		v.append(Vector3(q.x, 0.05 + town.gy(q), q.y) - o)
 	town._quad(st, v[3], v[2], v[1], v[0], Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector3.UP)

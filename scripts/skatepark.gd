@@ -81,7 +81,7 @@ func _build() -> void:
 	grass.albedo_texture = town.soft_noise
 	grass.uv1_triplanar = true
 	grass.uv1_scale = Vector3(0.2, 0.2, 0.2)
-	var concrete := _m(Color(0.55, 0.55, 0.53), 0.9)
+	var concrete := _m(Color(0.36, 0.36, 0.35), 0.95)
 	concrete.albedo_texture = town.soft_noise
 	concrete.uv1_triplanar = true
 	var steel := _m(Color(0.55, 0.56, 0.58), 0.35, 0.8)
@@ -96,37 +96,53 @@ func _build() -> void:
 	nav.add_child(gm)
 	_box(nav, Vector3(260, 1.0, 260), Vector3(0, -0.52, 0), grass, true)
 	_box(nav, Vector3(PLAY.size.x + 6, 0.04, PLAY.size.y + 6), Vector3(0, 0.0, 0), sand)
-	_box(nav, Vector3(26, 0.08, 13), Vector3(2, 0.04, -2), concrete, true, Vector3(0, 0.35, 0))
-	# rampa grande de metal con jaula (la de la foto): plataforma, barrotes y bajada
-	var big := Node3D.new()
-	big.position = Vector3(-12, 0, 6)
-	big.rotation.y = 0.35
-	nav.add_child(big)
-	_box(big, Vector3(4.0, 0.12, 3.0), Vector3(0, 1.3, 0), steel, true)
-	for x in [-1.9, 1.9]:
-		for z in [-1.4, 1.4]:
-			_box(big, Vector3(0.08, 1.3, 0.08), Vector3(x, 0.65, z), steel)
-	var xx := -2.0
-	while xx <= 2.0:
-		_box(big, Vector3(0.04, 1.5, 0.04), Vector3(xx, 2.1, -1.5), steel)
-		xx += 0.25
-	for side in [-1.0, 1.0]:
-		var zz := -1.5
-		while zz <= 1.5:
-			_box(big, Vector3(0.04, 1.5, 0.04), Vector3(2.0 * side, 2.1, zz), steel)
-			zz += 0.25
-	_box(big, Vector3(4.1, 0.06, 0.06), Vector3(0, 2.85, -1.5), steel)
-	# bajada (rampa inclinada) por delante
-	_box(big, Vector3(4.0, 0.1, 3.4), Vector3(0, 0.65, 3.0), dark, true, Vector3(0.4, 0, 0))
-	# rampas pequeñas azules, cajón de grind y banco
-	for k in 2:
-		var r := Node3D.new()
-		r.position = Vector3(6 + k * 3.2, 0, -6 - k * 1.5)
-		r.rotation.y = 0.35 + k * 0.2
-		nav.add_child(r)
-		_box(r, Vector3(1.6, 0.06, 1.4), Vector3(0, 0.3, 0), blue, true, Vector3(0.42, 0, 0))
-		_box(r, Vector3(1.6, 0.6, 0.06), Vector3(0, 0.3, -0.6), blue)
-	_box(nav, Vector3(3.2, 0.45, 0.5), Vector3(0, 0.23, -1), steel, true, Vector3(0, 0.35, 0))
+	_box(nav, Vector3(52, 0.08, 34), Vector3(-1, 0.04, 1), concrete, true)
+	# Según se entra por el portal (mirando al norte):
+	# derecha, en línea: quarter, meseta (funbox) y plano inclinado;
+	# izquierda: barandilla de grind y las olas.
+	var skin := _m(Color(0.42, 0.43, 0.44), 0.4, 0.7)   # chapa de las rampas
+	skin.albedo_texture = town.soft_noise
+	skin.uv1_triplanar = true
+	skin.uv1_scale = Vector3(0.5, 0.5, 0.5)
+	skin.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var smooth := concrete.duplicate() as StandardMaterial3D
+	smooth.cull_mode = BaseMaterial3D.CULL_DISABLED
+	smooth.albedo_color = Color(0.5, 0.5, 0.48)
+	# quarter (al fondo de la línea, mirando hacia el sur)
+	var q := PackedVector2Array([Vector2(0, 0)])
+	var R := 2.4
+	for i in range(1, 10):
+		var ang := deg_to_rad(82.0) * i / 9.0
+		q.append(Vector2(-R * sin(ang), R * (1.0 - cos(ang))))
+	var top := q[q.size() - 1].y
+	q.append(Vector2(-R - 1.8, top))
+	q.append(Vector2(-R - 1.8, 0))
+	_profile(nav, q, 5.0, Vector3(17, 0, -10.5), 0.0, skin, "quarter")
+	_box(nav, Vector3(5.0, 0.09, 0.09), Vector3(17, top + 0.03, -10.5 - R * sin(deg_to_rad(82.0))), steel)   # coping
+	for x in [14.6, 19.4]:   # barandillas del deck
+		_box(nav, Vector3(0.05, 1.0, 0.05), Vector3(x, top + 0.5, -10.5 - R - 1.7), steel)
+	_box(nav, Vector3(4.9, 0.05, 0.05), Vector3(17, top + 1.0, -10.5 - R - 1.7), steel)
+	# meseta / funbox: subida, mesa y bajada
+	var hb := 0.75
+	_profile(nav, PackedVector2Array([Vector2(3.4, 0), Vector2(1.4, hb), Vector2(-1.4, hb), Vector2(-3.4, 0)]),
+		4.0, Vector3(17, 0, 0.5), 0.0, smooth, "meseta")
+	_box(nav, Vector3(0.08, 0.08, 2.8), Vector3(15.0, hb + 0.04, 0.5), steel)   # bordillo de la mesa
+	# plano inclinado (bank) mirando al norte, hacia la meseta
+	_profile(nav, PackedVector2Array([Vector2(-3.8, 0), Vector2(0, 1.25), Vector2(0.6, 1.25), Vector2(0.6, 0)]),
+		5.0, Vector3(17, 0, 12.5), 0.0, smooth, "bank")
+	# barandilla de grind (izquierda)
+	var rail := _m(Color(0.85, 0.75, 0.15), 0.35, 0.7)
+	_box(nav, Vector3(0.06, 0.06, 7.0), Vector3(-13, 0.42, 0), rail, true)
+	for z in [-3.2, 0.0, 3.2]:
+		_box(nav, Vector3(0.06, 0.4, 0.06), Vector3(-13, 0.2, z), rail)
+	# olas: lomos de hormigón seguidos
+	var wv := PackedVector2Array()
+	var LW := 14.0
+	var n := 28
+	for i in n + 1:
+		var u := float(i) / n
+		wv.append(Vector2(LW * 0.5 - LW * u, 0.45 * (0.5 - 0.5 * cos(u * TAU * 3.0))))
+	_profile(nav, wv, 4.5, Vector3(-21, 0, 0), 0.0, smooth, "olas")
 	for k in 3:
 		var b := _box(nav, Vector3(1.8, 0.45, 0.5), Vector3(10.0 - k * 9.0, 0.23, 14.0), _m(Color(0.42, 0.26, 0.14)), true)
 		b.name = "banco"
@@ -197,6 +213,52 @@ func _build() -> void:
 	_bake()
 
 
+## Pieza extruida: perfil (z, y) en el plano lateral, ancho en x. Con colisión.
+func _profile(parent: Node3D, prof: PackedVector2Array, width: float, pos: Vector3, yaw: float,
+		mat: Material, nm: String) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hw := width * 0.5
+	var n := prof.size()
+	for i in n:
+		var a := prof[i]
+		var b := prof[(i + 1) % n]
+		if a.distance_to(b) < 0.001:
+			continue
+		var p0 := Vector3(-hw, a.y, a.x)
+		var p1 := Vector3(hw, a.y, a.x)
+		var p2 := Vector3(hw, b.y, b.x)
+		var p3 := Vector3(-hw, b.y, b.x)
+		var L := a.distance_to(b)
+		for v in [[p0, Vector2(0, 0)], [p1, Vector2(width, 0)], [p2, Vector2(width, L)],
+				[p0, Vector2(0, 0)], [p2, Vector2(width, L)], [p3, Vector2(0, L)]]:
+			st.set_uv(v[1])
+			st.add_vertex(v[0])
+	var tris := Geometry2D.triangulate_polygon(prof)
+	for side in [-hw, hw]:
+		for k in tris:
+			var pp := prof[k]
+			st.set_uv(Vector2(pp.x, pp.y))
+			st.add_vertex(Vector3(side, pp.y, pp.x))
+	st.generate_normals()
+	var mesh := st.commit()
+	var body := StaticBody3D.new()
+	body.name = nm
+	body.position = pos
+	body.rotation.y = yaw
+	parent.add_child(body)
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	body.add_child(mi)
+	var cs := CollisionShape3D.new()
+	var sh := ConcavePolygonShape3D.new()
+	sh.set_faces(mesh.get_faces())
+	sh.backface_collision = true
+	cs.shape = sh
+	body.add_child(cs)
+
+
 func _tree(p: Vector3) -> void:
 	var trunk := _m(Color(0.3, 0.22, 0.15))
 	var leaves := _m(Color(0.2, 0.36, 0.14), 0.95)
@@ -238,8 +300,8 @@ func _tree(p: Vector3) -> void:
 func _build_statue() -> void:
 	statue = Node3D.new()
 	statue.name = "EstatuaCulo"
-	statue.position = Vector3(16, 0, 6)
-	statue.rotation.y = -0.6
+	statue.position = Vector3(0, 0, -17)
+	statue.rotation.y = 0.0
 	statue.visible = false
 	add_child(statue)
 	var stone := _m(Color(0.6, 0.58, 0.55), 0.9)

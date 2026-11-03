@@ -64,6 +64,14 @@ var bus = null
 var bus_stops: Array = []
 var bus_gates_data: Array = []
 var bus_gates: Array = []        # barreras construidas {arm, pos}
+var terrain := PackedFloat32Array()   # relieve (MDT del IGN), alturas relativas al Bar Chiqui
+var terrain_origin := Vector2.ZERO
+var terrain_step := 5.0
+var terrain_nx := 0
+var terrain_nz := 0
+var pads: Array = []             # explanadas: {poly, h} (prefabs fuera del recorte principal)
+const FLAT_MARGIN := 30.0        # el recorte principal se queda llano (con su borde)
+const FLAT_BLEND := 90.0         # y se va fundiendo con el relieve real
 var islands: Array = []          # zonas con detalle fuera del recorte principal {zone, rect}
 
 var noise_tex: NoiseTexture2D
@@ -97,6 +105,12 @@ func build(json_path: String) -> void:
 		_generate_test_town()
 	if bounds.size == Vector2.ZERO:
 		_compute_bounds()
+
+	# explanadas bajo los edificios hechos a mano que quedan fuera del recorte llano
+	for pf in prefabs:
+		if not bounds.grow(FLAT_MARGIN).has_point(pf["pos"]):
+			var grown := Geometry2D.offset_polygon(pf["footprint"], 1.5)
+			pads.append({"poly": grown[0] if not grown.is_empty() else pf["footprint"], "h": gy(pf["pos"])})
 
 	nav_region = NavigationRegion3D.new()
 	nav_region.name = "Navegacion"
@@ -224,6 +238,15 @@ func _load_json(path: String) -> void:
 	for p in data.get("plazuelas", []):
 		plazuelas.append({"points": _pts(p["points"]), "name": str(p["name"]),
 			"dir": Vector2(p["dir"][0], p["dir"][1]), "normal": Vector2(p["normal"][0], p["normal"][1])})
+	if data.get("terrain") is Dictionary:
+		var tr: Dictionary = data["terrain"]
+		var f := FileAccess.open(path.get_base_dir().path_join(str(tr["file"])), FileAccess.READ)
+		if f:
+			terrain = f.get_buffer(f.get_length()).to_float32_array()
+			terrain_origin = Vector2(tr["origin"][0], tr["origin"][1])
+			terrain_step = float(tr["step"])
+			terrain_nx = int(tr["nx"])
+			terrain_nz = int(tr["nz"])
 	if data.get("backdrop") is Dictionary:
 		backdrop_data = data["backdrop"]
 	bus_route = _pts(data.get("bus_route", []))
@@ -436,15 +459,16 @@ func _build_ground() -> void:
 	body.name = "Suelo"
 	nav_region.add_child(body)
 	# zonas de las paradas nuevas: su propio suelo
+	# (urbanización de chalets: césped y tierra entre casas, no adoquín)
+	var lawn := StandardMaterial3D.new()
+	lawn.albedo_color = Color(0.36, 0.4, 0.24)
+	lawn.albedo_texture = soft_noise
+	lawn.uv1_triplanar = true
+	lawn.uv1_world_triplanar = true
+	lawn.uv1_scale = Vector3(0.08, 0.08, 0.08)
+	lawn.roughness = 1.0
 	for il in islands:
-		var ar: Rect2 = il["rect"].grow(10.0)
-		var ics := CollisionShape3D.new()
-		var ibox := BoxShape3D.new()
-		ibox.size = Vector3(ar.size.x, 1.0, ar.size.y)
-		ics.shape = ibox
-		ics.position = Vector3(ar.get_center().x, -0.5, ar.get_center().y)
-		body.add_child(ics)
-		_ground_tiles(ar)
+		_ground_tiles(il["rect"].grow(10.0), body, lawn)
 	var area := bounds.grow(30.0)
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -453,21 +477,98 @@ func _build_ground() -> void:
 	cs.position = Vector3(area.get_center().x, -0.5, area.get_center().y)
 	body.add_child(cs)
 	_ground_tiles(area)
+	_school_yards()
 
 
-## Suelo troceado: el renderizador de Compatibilidad limita las luces por objeto
-func _ground_tiles(area: Rect2) -> void:
+## Patio del instituto (áreas valladas): asfalto y una pista pintada, no adoquín
+func _school_yards() -> void:
+	for ar in areas:
+		if not ar.get("fence", false):
+			continue
+		var poly: PackedVector2Array = ar["points"]
+		var tris := Geometry2D.triangulate_polygon(poly)
+		if tris.is_empty():
+			continue
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for t in range(0, tris.size(), 3):
+			var vs := []
+			for k in 3:
+				var p := poly[tris[t + k]]
+				vs.append(Vector3(p.x, 0.012 + gy(p), p.y))
+			_tri(st, [vs[0], vs[2], vs[1]], [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO], Vector3.UP, Vector2.ZERO, Color.WHITE)
+		_mesh_node(self, st.commit(), asphalt_mat, Vector3.ZERO, false)
+		# pista: a lo largo del lado más largo, centrada, si cabe entera
+		var best := 0
+		for i in poly.size():
+			if poly[i].distance_to(poly[(i + 1) % poly.size()]) > poly[best].distance_to(poly[(best + 1) % poly.size()]):
+				best = i
+		var ax := (poly[(best + 1) % poly.size()] - poly[best]).normalized()
+		var c := Vector2.ZERO
+		for p in poly:
+			c += p
+		c /= poly.size()
+		var sz := Vector2(28.0, 15.0)
+		var fits := false
+		while sz.x > 14.0 and not fits:
+			fits = true
+			for corner in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+				var q: Vector2 = c + ax * corner.x * (sz.x * 0.5 + 1.0) + ax.orthogonal() * corner.y * (sz.y * 0.5 + 1.0)
+				if not Geometry2D.is_point_in_polygon(q, poly):
+					fits = false
+			if not fits:
+				sz *= 0.85
+		if not fits:
+			continue
+		var cm := ShaderMaterial.new()
+		cm.shader = preload("res://shaders/court.gdshader")
+		cm.set_shader_parameter("court", sz)
+		cm.set_shader_parameter("noise_tex", soft_noise)
+		var pm := PlaneMesh.new()
+		pm.size = sz
+		var mi := _mesh_node(self, pm, cm, Vector3(c.x, 0.03 + gy(c), c.y), false)
+		mi.rotation.y = -ax.angle()
+
+
+## Suelo troceado: el renderizador de Compatibilidad limita las luces por objeto.
+## Con `body`, el suelo sigue el relieve y lleva su propia colisión.
+func _ground_tiles(area: Rect2, body: StaticBody3D = null, gmat: Material = null) -> void:
+	if gmat == null:
+		gmat = paver_mat
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(GROUND_TILE, GROUND_TILE)
 	var holder := Node3D.new()
 	holder.name = "Acera"
 	add_child(holder)
+	var sub := 4
+	var cell := GROUND_TILE / sub
 	var x := area.position.x
 	while x < area.end.x:
 		var z := area.position.y
 		while z < area.end.y:
-			var mi := _mesh_node(holder, pm, paver_mat, Vector3(x + GROUND_TILE * 0.5, 0.0, z + GROUND_TILE * 0.5), false)
-			mi.name = "t"
+			if body == null:
+				var mi := _mesh_node(holder, pm, paver_mat, Vector3(x + GROUND_TILE * 0.5, 0.0, z + GROUND_TILE * 0.5), false)
+				mi.name = "t"
+			else:
+				var st := SurfaceTool.new()
+				st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				for i in sub:
+					for j in sub:
+						var x0 := x + i * cell
+						var z0 := z + j * cell
+						var a := Vector3(x0, gy3(x0, z0), z0)
+						var b := Vector3(x0 + cell, gy3(x0 + cell, z0), z0)
+						var c := Vector3(x0 + cell, gy3(x0 + cell, z0 + cell), z0 + cell)
+						var d := Vector3(x0, gy3(x0, z0 + cell), z0 + cell)
+						var nrm := (d - a).cross(b - a).normalized()
+						_quad(st, a, b, c, d, Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z), Vector2(d.x, d.z), nrm)
+				st.generate_normals()
+				var mesh := st.commit()
+				var mi := _mesh_node(holder, mesh, gmat, Vector3.ZERO, false)
+				mi.name = "t"
+				var cs := CollisionShape3D.new()
+				cs.shape = mesh.create_trimesh_shape()
+				body.add_child(cs)
 			z += GROUND_TILE
 		x += GROUND_TILE
 
@@ -532,11 +633,20 @@ func _build_streets() -> void:
 		for i in pts.size() - 1:
 			var st := SurfaceTool.new()
 			st.begin(Mesh.PRIMITIVE_TRIANGLES)
-			var a := Vector3(lefts[i].x, y, lefts[i].y)
-			var b := Vector3(rights[i].x, y, rights[i].y)
-			var c := Vector3(rights[i + 1].x, y, rights[i + 1].y)
-			var d := Vector3(lefts[i + 1].x, y, lefts[i + 1].y)
-			_quad(st, a, b, c, d, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector3.UP)
+			# troceado cada ~4 m para seguir el relieve
+			var nseg := maxi(int(pts[i].distance_to(pts[i + 1]) / 4.0), 1) if not terrain.is_empty() else 1
+			for q in nseg:
+				var t0 := float(q) / nseg
+				var t1 := float(q + 1) / nseg
+				var l0: Vector2 = lefts[i].lerp(lefts[i + 1], t0)
+				var r0: Vector2 = rights[i].lerp(rights[i + 1], t0)
+				var l1: Vector2 = lefts[i].lerp(lefts[i + 1], t1)
+				var r1: Vector2 = rights[i].lerp(rights[i + 1], t1)
+				var a := Vector3(l0.x, y + gy(l0), l0.y)
+				var b := Vector3(r0.x, y + gy(r0), r0.y)
+				var c := Vector3(r1.x, y + gy(r1), r1.y)
+				var d := Vector3(l1.x, y + gy(l1), l1.y)
+				_quad(st, a, b, c, d, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector3.UP)
 			_mesh_node(holder, st.commit(), mat, Vector3.ZERO, false)
 
 
@@ -578,7 +688,7 @@ func _build_curbs() -> void:
 						continue
 					var dir := (p1 - p0).normalized()
 					var basis := Basis(Vector3.UP, atan2(-dir.y, dir.x))
-					_box_into(st, Transform3D(basis, Vector3(mid.x, 0.06, mid.y)), Vector3(p0.distance_to(p1) + 0.02, 0.12, 0.16))
+					_box_into(st, Transform3D(basis, Vector3(mid.x, 0.06 + gy(mid), mid.y)), Vector3(p0.distance_to(p1) + 0.02, 0.12, 0.16))
 					count += 1
 		if count > 0:
 			_mesh_node(holder, st.commit(), curb_mat, Vector3.ZERO, false)
@@ -664,6 +774,13 @@ func _build_buildings() -> void:
 		var quad := (pts.size() == 4 and h < 14.0) or named_roof
 		var wall_top := h if quad else h + 0.7  # pretil en azoteas
 
+		# en cuesta: el edificio se apoya en lo más alto y por abajo asoma el zócalo
+		var base := -INF
+		var low := INF
+		for q in pts:
+			var gq := gy(q)
+			base = maxf(base, gq)
+			low = minf(low, gq)
 		var walls := SurfaceTool.new()
 		walls.begin(Mesh.PRIMITIVE_TRIANGLES)
 		var n := pts.size()
@@ -679,7 +796,7 @@ func _build_buildings() -> void:
 			if Geometry2D.is_point_in_polygon(mid + n2 * 0.05, pts):
 				n2 = -n2
 			var nrm := Vector3(n2.x, 0, n2.y)
-			var y0 := -0.2
+			var y0 := -0.2 - (base - low)
 			var uv2 := Vector2(length if windows else 0.0, wall_top)
 			_quad(walls, Vector3(a2.x, y0, a2.y), Vector3(b2.x, y0, b2.y), Vector3(b2.x, wall_top, b2.y), Vector3(a2.x, wall_top, a2.y),
 				Vector2(0, y0), Vector2(length, y0), Vector2(length, wall_top), Vector2(0, wall_top), nrm, uv2, col)
@@ -691,6 +808,7 @@ func _build_buildings() -> void:
 		var body := StaticBody3D.new()
 		body.name = b["name"] if b["name"] != "" else "Casa%d" % idx
 		holder.add_child(body)
+		body.position.y = base
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
 		body.add_child(mi)
@@ -851,7 +969,7 @@ func _build_prefabs() -> void:
 			bar = BarChiqui.new()
 			bar.name = "BarChiqui"
 			nav_region.add_child(bar)
-			bar.position = Vector3(pf["pos"].x, 0.0, pf["pos"].y)
+			bar.position = Vector3(pf["pos"].x, gy(pf["pos"]), pf["pos"].y)
 			bar.rotation.y = pf["yaw"]
 			bar.build(self)
 			exterior_open = false
@@ -859,7 +977,7 @@ func _build_prefabs() -> void:
 			var lm := Node3D.new()
 			lm.name = pf["prefab"]
 			nav_region.add_child(lm)
-			lm.position = Vector3(pf["pos"].x, 0.0, pf["pos"].y)
+			lm.position = Vector3(pf["pos"].x, gy(pf["pos"]), pf["pos"].y)
 			lm.rotation.y = pf["yaw"]
 			landmark_nodes[pf["prefab"]] = lm
 			match str(pf["prefab"]):
@@ -962,6 +1080,50 @@ func _in_plazuela(p: Vector2) -> bool:
 	return false
 
 
+## Altura del terreno real (MDT) en un punto, sin allanar
+func terrain_h(p: Vector2) -> float:
+	if terrain.is_empty():
+		return 0.0
+	var fx := clampf((p.x - terrain_origin.x) / terrain_step, 0.0, terrain_nx - 1.001)
+	var fz := clampf((p.y - terrain_origin.y) / terrain_step, 0.0, terrain_nz - 1.001)
+	var i := int(fx)
+	var j := int(fz)
+	var tx := fx - i
+	var tz := fz - j
+	var k := j * terrain_nx + i
+	var a := lerpf(terrain[k], terrain[k + 1], tx)
+	var b := lerpf(terrain[k + terrain_nx], terrain[k + terrain_nx + 1], tx)
+	return lerpf(a, b, tz)
+
+
+## Altura del suelo del juego: el recorte principal es llano (como estaba) y
+## fuera se va al relieve real; las explanadas de los edificios hechos a mano, planas.
+func gy(p: Vector2) -> float:
+	if terrain.is_empty():
+		return 0.0
+	var r := bounds.grow(FLAT_MARGIN)
+	var dx := maxf(maxf(r.position.x - p.x, p.x - r.end.x), 0.0)
+	var dz := maxf(maxf(r.position.y - p.y, p.y - r.end.y), 0.0)
+	var d := Vector2(dx, dz).length()
+	if d <= 0.0:
+		return 0.0
+	var h := terrain_h(p) * smoothstep(0.0, FLAT_BLEND, d)
+	for pd in pads:
+		var poly: PackedVector2Array = pd["poly"]
+		if Geometry2D.is_point_in_polygon(p, poly):
+			return pd["h"]
+		var best := INF
+		for i in poly.size():
+			best = minf(best, p.distance_to(Geometry2D.get_closest_point_to_segment(p, poly[i], poly[(i + 1) % poly.size()])))
+		if best < 6.0:
+			h = lerpf(pd["h"], h, smoothstep(0.0, 6.0, best))
+	return h
+
+
+func gy3(x: float, z: float) -> float:
+	return gy(Vector2(x, z))
+
+
 ## Zona de parada (isla) en la que cae el punto, o "" si no está en ninguna
 func island_at(p: Vector2) -> String:
 	for il in islands:
@@ -1020,7 +1182,7 @@ func _build_poles_and_wires() -> void:
 		if not _spot_free(p, 0.6):
 			continue
 		var body := StaticBody3D.new()
-		body.position = Vector3(p.x, 0, p.y)
+		body.position = Vector3(p.x, gy(p), p.y)
 		body.rotation.y = atan2(-c["dir"].y, c["dir"].x) + PI * 0.5
 		holder.add_child(body)
 		_mesh_node(body, pole_mesh, wood_mat)
@@ -1051,7 +1213,7 @@ func _build_poles_and_wires() -> void:
 				var target = _nearest_wall(Vector2(p0.position.x, p0.position.z), 14.0)
 				if target != null:
 					var a2 := p0.position + Vector3(0, 7.0, 0)
-					var b2 := Vector3(target["pos"].x, minf(target["height"] - 0.4, 5.5), target["pos"].y)
+					var b2 := Vector3(target["pos"].x, minf(target["height"] - 0.4, 5.5) + gy(target["pos"]), target["pos"].y)
 					_wire(st, a2, b2, 0.5)
 	var wires := _mesh_node(self, st.commit(), wire_mat, Vector3.ZERO, false)
 	wires.name = "Cables"
@@ -1120,7 +1282,7 @@ func _build_trees() -> void:
 		if rng.randf() < 0.25:
 			continue
 		var body := StaticBody3D.new()
-		body.position = Vector3(p.x, 0, p.y)
+		body.position = Vector3(p.x, gy(p), p.y)
 		body.rotation.y = rng.randf() * TAU
 		holder.add_child(body)
 		_mesh_node(body, _tree_mesh(), bark_mat)
@@ -1172,11 +1334,12 @@ func _boundary_walls(r: Rect2) -> void:
 	body.name = "LimiteMapa"
 	nav_region.add_child(body)
 	var c := r.get_center()
+	var y := gy(c)   # muros altos: valen aunque haya cuesta
 	var walls := [
-		[Vector3(c.x, 3, r.position.y), Vector3(r.size.x + 2, 6, 1)],
-		[Vector3(c.x, 3, r.end.y), Vector3(r.size.x + 2, 6, 1)],
-		[Vector3(r.position.x, 3, c.y), Vector3(1, 6, r.size.y + 2)],
-		[Vector3(r.end.x, 3, c.y), Vector3(1, 6, r.size.y + 2)],
+		[Vector3(c.x, y, r.position.y), Vector3(r.size.x + 2, 120, 1)],
+		[Vector3(c.x, y, r.end.y), Vector3(r.size.x + 2, 120, 1)],
+		[Vector3(r.position.x, y, c.y), Vector3(1, 120, r.size.y + 2)],
+		[Vector3(r.end.x, y, c.y), Vector3(1, 120, r.size.y + 2)],
 	]
 	for w in walls:
 		var cs := CollisionShape3D.new()
@@ -1214,7 +1377,7 @@ func _compute_spawns() -> void:
 			for j in steps + 1:
 				var p := a.lerp(b, float(j) / steps)
 				if inner.has_point(p) and not _in_any_building(p, 0.9):
-					spawn_points.append(Vector3(p.x, 0.05, p.y))
+					spawn_points.append(Vector3(p.x, 0.05 + gy(p), p.y))
 					spawn_zones.append("")
 	for p in pois:
 		if p["type"] == "fountain":
@@ -1305,7 +1468,7 @@ func _build_lamps() -> void:
 			head_y = 3.9
 			_mesh_node(lamp, bracket, iron_mat, Vector3(0, head_y + 0.35, 0))
 		else:
-			lamp.position = Vector3(p.x, 0, p.y)
+			lamp.position = Vector3(p.x, gy(p), p.y)
 			_mesh_node(lamp, post_mesh, iron_mat)
 		var r := rng.randf()
 		var mode := "ok"
@@ -1396,7 +1559,18 @@ func _bake_navigation() -> void:
 		for il in islands:
 			var r: Rect2 = il["rect"]
 			var inm: NavigationMesh = pnm.duplicate()
-			inm.filter_baking_aabb = AABB(Vector3(r.position.x, -1.5, r.position.y), Vector3(r.size.x, 4.1, r.size.y))
+			var hmin := INF
+			var hmax := -INF
+			var sx := r.position.x
+			while sx <= r.end.x:
+				var sz := r.position.y
+				while sz <= r.end.y:
+					var hh := gy3(sx, sz)
+					hmin = minf(hmin, hh)
+					hmax = maxf(hmax, hh)
+					sz += 5.0
+				sx += 5.0
+			inm.filter_baking_aabb = AABB(Vector3(r.position.x, hmin - 1.5, r.position.y), Vector3(r.size.x, hmax - hmin + 4.1, r.size.y))
 			NavigationServer3D.bake_from_source_geometry_data(inm, sgd)
 			var reg := NavigationRegion3D.new()
 			reg.name = "Navegacion_" + str(il["zone"])

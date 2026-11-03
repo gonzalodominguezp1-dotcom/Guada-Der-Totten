@@ -5,7 +5,11 @@ Compatibilidad: el PC del usuario no aguanta Forward+). Todo el mundo se genera 
 arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en español neutro.
 
 - Mapa: `data/town.json`, generado desde `data/map.osm` con
-  `python3 tools/osm_to_json.py data/map.osm data/map_sur.osm data/map_pueblo.osm data/town.json --crop=-175,60,262,560 --start "Chiqui" --tanatorio data/tanatorio.osm --backdrop=-1300,-450,900,1060`.
+  `python3 tools/osm_to_json.py data/map.osm data/map_sur.osm data/map_pueblo.osm data/town.json --crop=-175,60,262,560 --start "Chiqui" --tanatorio data/tanatorio.osm --backdrop=-1300,-450,900,1060 --dem <PNOA_MDT05...tif>`
+  (el .tif del MDT del IGN no está en el repo; `--dem` genera `data/terrain.bin`, rejilla de 5 m
+  con alturas relativas al Bar Chiqui, y `tanatorio.town_lights`).
+- Relieve: `town.gy(p)` = altura del suelo. El recorte principal se queda plano (FLAT_MARGIN/
+  FLAT_BLEND); islas (Segundo Guada) y fondo siguen el MDT; los prefabs fuera llevan "pads" planos.
 - Bar Chiqui (zona de inicio = todo el bar, 15x22 m como en OSM): `scripts/bar_chiqui.gd`,
   coordenadas locales (+Z = avenida). Ventanas W1-W6 en el perímetro; se descartan solas si
   dan contra otra casa. Única salida: la verja (BuyDoor estilo "gate").
@@ -27,7 +31,8 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   se enciende pagando y abre la zona "tanatorio").
 - Tanatorio: nivel aparte (`scripts/tanatorio.gd`, datos en la clave "tanatorio" de town.json)
   a ~2,5 km al este del pueblo, con su propia navmesh. main.gd cambia niebla/luz y oculta el
-  pueblo al entrar. El cementerio NO se modela ni se puede visitar (petición del usuario).
+  pueblo al entrar. Al este, mirador con pretil bajo y el terreno cae al valle: luces del pueblo
+  (MultiMesh billboard sin niebla, `_town_lights`). El cementerio NO se modela ni se puede visitar (petición del usuario).
 - Resto del pueblo de fondo (`scripts/backdrop.gd`, clave "backdrop"): casas y calles sencillas
   fuera del recorte, fusionadas por bloques de 100 m, sin colisión, visibility_range 300 m.
 - Autobús 726 (`scripts/bus.gd`): circular con 3 paradas (BUS_STOPS del conversor: Bar Chiqui,
@@ -39,7 +44,8 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   con muro de jardín (zones._garden_wall), casa Calle Artes 22 (prefab "artes22", ventana del
   pepino `scripts/ee_window.gd`) y portal al skatepark. `town.in_detail(p)`/`island_at(p)`.
   La navmesh grande tarda unos segundos en estar lista (los tests esperan a `_main_nav_ready`).
-- Skatepark (`scripts/skatepark.gd`): nivel aparte; "el colega" (zombie special "npc", cara en
+- Skatepark (`scripts/skatepark.gd`): nivel aparte; según se entra, a la derecha en línea quarter,
+  meseta y plano inclinado; a la izquierda barandilla y olas (piezas extruidas con `_profile`); "el colega" (zombie special "npc", cara en
   assets/npc/cara.png) suelta el "calzoncillo"; con el pepino aparece la estatua del culo:
   10 muertes cerca con "zurraspa_pap" y luego [F] para meterle el pepino. Especiales (panzer, npc)
   no cuentan en la ronda (round_manager.spawn_special); zombies lejos/atascados reaparecen.
