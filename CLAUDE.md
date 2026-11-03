@@ -26,7 +26,7 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   (`scripts/zurraspa_wave.gd`) y Defecación Nuclear con [G]. Pack-a-Punch dentro del
   tanatorio (`scripts/pack_a_punch.gd`, mejora según la clave "pap" de weapons.gd).
 - Zona "instituto": puerta en el callejón de la biblioteca (plaza trasera del poli) → Eras de
-  Abajo → glorieta → patio vallado del IES (áreas con "fence": valla verde y "gates"). Instituto
+  Abajo → glorieta → patio vallado del IES (áreas con "fence": valla negra de barrotes y "gates"). Instituto
   y colegio en interiors.gd; en el vestíbulo del instituto está el portal (`scripts/portal.gd`,
   se enciende pagando y abre la zona "tanatorio").
 - Tanatorio: nivel aparte (`scripts/tanatorio.gd`, datos en la clave "tanatorio" de town.json)
@@ -41,7 +41,7 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   queda quieto (`player.riding_bus`) y `_carry` le aplica el movimiento del bus.
   Barreras "SOLO BUS" (Bus.make_gate) donde la ruta corta tapones/escombros. Llegar abre la zona.
 - Segundo Guada = "island" de town.json (zona "segundo"): chalets de ladrillo retranqueados
-  con muro de jardín (zones._garden_wall), casa Calle Artes 22 (prefab "artes22", ventana del
+  con muro de jardín (zones._garden_wall: zócalo + panel marrón opaco), casa Calle Artes 22 (prefab "artes22", ventana del
   pepino `scripts/ee_window.gd`) y portal al skatepark. `town.in_detail(p)`/`island_at(p)`.
   La navmesh grande tarda unos segundos en estar lista (los tests esperan a `_main_nav_ready`).
 - Skatepark (`scripts/skatepark.gd`): nivel aparte; según se entra, a la derecha en línea quarter,
@@ -55,6 +55,8 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
 - Fachadas: `shaders/facade.gdshader`, COLOR.a = tipo*64 + estilo*16 + semilla
   (tipo: enlucido/granito/ladrillo/piedra; estilo: clásico/moderno/tiendas o hexagonal/público).
 - Armas en `scripts/weapons.gd`: "sight_y" y "ads" alinean la mira al apuntar.
+- Vallas en MultiMesh: usar `basis.scaled_local()` (con `scaled()` la escala va en ejes globales y
+  las piezas salen torcidas/cruzadas).
 - Puertas comprables en capa 16 (excluida de la navmesh, no hace falta rehornear).
 - Barricadas: capa 8 (bloquean jugador y zombies, no balas).
 - Sonidos: `python3 tools/make_sounds.py assets/sounds` (sintetizados).

@@ -100,14 +100,12 @@ func _build() -> void:
 	# Según se entra por el portal (mirando al norte):
 	# derecha, en línea: quarter, meseta (funbox) y plano inclinado;
 	# izquierda: barandilla de grind y las olas.
-	var skin := _m(Color(0.42, 0.43, 0.44), 0.4, 0.7)   # chapa de las rampas
+	var skin := _m(Color(0.13, 0.32, 0.68), 0.45, 0.35)   # chapa azul de las rampas
 	skin.albedo_texture = town.soft_noise
 	skin.uv1_triplanar = true
 	skin.uv1_scale = Vector3(0.5, 0.5, 0.5)
 	skin.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var smooth := concrete.duplicate() as StandardMaterial3D
-	smooth.cull_mode = BaseMaterial3D.CULL_DISABLED
-	smooth.albedo_color = Color(0.5, 0.5, 0.48)
+	var smooth := skin   # todas las rampas son azules
 	# quarter (al fondo de la línea, mirando hacia el sur)
 	var q := PackedVector2Array([Vector2(0, 0)])
 	var R := 2.4

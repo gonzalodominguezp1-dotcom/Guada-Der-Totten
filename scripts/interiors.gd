@@ -954,18 +954,15 @@ static func artes22(root: Node3D, town) -> void:
 	win.name = "VentanaPepino"
 	house.add_child(win)
 	win.position = Vector3(2.6, 4.5, 0.08)
-	# jardín delantero: murete de piedra con valla verde y puerta
+	# jardín delantero: murete de piedra con panel marrón opaco y puerta
 	var stone := _soft(town, Color(0.72, 0.6, 0.48), 0.9, 1.2)
-	var green := _m(Color(0.13, 0.42, 0.33), 0.5, 0.3)
+	var brown := _m(Color(0.33, 0.22, 0.13), 0.7, 0.15)
 	for seg in [[-w * 0.5, 2.6], [3.8, w * 0.5]]:
 		var L0: float = seg[1] - seg[0]
 		var cx: float = (seg[0] + seg[1]) * 0.5
 		L._box(root, Vector3(L0, 0.9, 0.35), Vector3(cx, 0.45, -0.2), stone, true)
-		var t := 0.1
-		while t < L0:
-			L._box(root, Vector3(0.025, 1.0, 0.025), Vector3(seg[0] + t, 1.4, -0.2), green)
-			t += 0.12
-		L._box(root, Vector3(L0, 0.04, 0.04), Vector3(cx, 1.9, -0.2), green)
+		L._box(root, Vector3(L0, 1.0, 0.04), Vector3(cx, 1.4, -0.2), brown)
+		L._box(root, Vector3(L0, 0.05, 0.07), Vector3(cx, 1.92, -0.2), brown)
 	var gate := L._box(root, Vector3(1.2, 1.8, 0.05), Vector3(3.2, 0.9, -0.2), _m(Color(0.1, 0.12, 0.1), 0.5, 0.4))
 	gate.name = "cancela"
 	var plate := L._box(root, Vector3(0.35, 0.25, 0.04), Vector3(4.2, 1.2, -0.0), _m(Color(0.9, 0.88, 0.82)))
