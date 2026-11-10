@@ -6,6 +6,8 @@ extends Node3D
 
 signal navigation_ready
 
+const Loadout = preload("res://scripts/loadout.gd")
+const StreetProps = preload("res://scripts/street_props.gd")
 const FACADE_SHADER = preload("res://shaders/facade.gdshader")
 const COBBLE_SHADER = preload("res://shaders/cobble.gdshader")
 const ASPHALT_SHADER = preload("res://shaders/asphalt.gdshader")
@@ -55,6 +57,7 @@ var spawn_zones: Array = []  # zona de cada punto de aparición
 var landmark_nodes := {}     # nombre del prefab -> nodo
 var portal_instituto = null
 var tanatorio = null         # nivel aparte (tanatorio.gd)
+var loadout_items: Array = []
 var skatepark = null         # nivel aparte (skatepark.gd), se llega por el portal de Segundo Guada
 var portal_segundo = null
 var tanatorio_data := {}
@@ -137,10 +140,14 @@ func build(json_path: String) -> void:
 		_compute_spawns()
 	else:
 		Zones.compute_spawns(self)
+	if not is_test_town:
+		StreetProps.build(self)   # coches aparcados y contenedores
 	if not tanatorio_data.is_empty():
 		# nivel aparte, lejos del pueblo (se llega por el portal del instituto)
 		tanatorio = Tanatorio.create(self, tanatorio_data, Vector3(bounds.end.x + 2500.0, 0.0, bounds.get_center().y))
 	skatepark = Skatepark.create(self, Vector3(bounds.end.x + 2500.0, 0.0, bounds.get_center().y + 1500.0))
+	if not is_test_town:
+		Loadout.build(self)   # armas de pared, caja mágica y perks
 	_choose_player_start()
 	_build_lamps()
 	_bake_navigation()

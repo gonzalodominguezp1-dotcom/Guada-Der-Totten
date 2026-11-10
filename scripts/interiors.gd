@@ -847,7 +847,7 @@ static func instituto(root: Node3D, town) -> void:
 	L._facade_box(wing, town, w - 1.2, 67.9 - block_d, 7.2, 0, 1, Color(0.88, 0.76, 0.6), 4)
 	var pier := _soft(town, Color(0.62, 0.55, 0.45), 0.9, 1.2)
 	for x in [-(w - 1.2) * 0.5, (w - 1.2) * 0.5]:
-		L._box(wing, Vector3(1.0, 7.2, 1.0), Vector3(x, 3.6, -(67.9 - block_d) + 0.4), pier)
+		L._box(wing, Vector3(x, 3.6, -(67.9 - block_d) + 0.4), Vector3(1.0, 7.2, 1.0), pier)
 	for k in 6:
 		var ac := L._box(wing, Vector3(w * 0.5 - 0.45, 4.6 + (k % 2) * 2.2, -6.0 - k * 8.5), Vector3(0.5, 0.6, 0.9), _m(Color(0.86, 0.86, 0.84), 0.6))
 		ac.name = "aire"
@@ -912,26 +912,26 @@ static func colegio(root: Node3D, town) -> void:
 	var k := 0
 	while x0 <= 12.0:
 		L._cyl(root, Vector3(x0, 1.5, 4.5), 0.09, 0.09, 3.0, _m(pcols[k % pcols.size()], 0.5))
-		var diag := L._box(root, Vector3(0.05, 0.05, 4.8), Vector3(x0, 3.1, 2.3), truss)
+		var diag := L._box(root, Vector3(x0, 3.1, 2.3), Vector3(0.05, 0.05, 4.8), truss)
 		diag.rotation.x = 0.12
 		x0 += 3.0
 		k += 1
-	L._box(root, Vector3(25.0, 0.12, 4.8), Vector3(0, 3.35, 2.3), _m(Color(0.75, 0.76, 0.74), 0.6, 0.3))
-	L._box(root, Vector3(25.2, 0.25, 0.1), Vector3(0, 3.3, 4.7), red)
-	L._box(root, Vector3(25.0, 0.06, 0.06), Vector3(0, 3.0, 4.6), truss)
+	L._box(root, Vector3(0, 3.35, 2.3), Vector3(25.0, 0.12, 4.8), _m(Color(0.75, 0.76, 0.74), 0.6, 0.3))
+	L._box(root, Vector3(0, 3.3, 4.7), Vector3(25.2, 0.25, 0.1), red)
+	L._box(root, Vector3(0, 3.0, 4.6), Vector3(25.0, 0.06, 0.06), truss)
 	# vallas de colores del patio infantil
 	var fcols := [Color(0.15, 0.3, 0.85), Color(0.85, 0.15, 0.2), Color(0.15, 0.6, 0.25), Color(0.95, 0.8, 0.1)]
 	for j in 8:
 		var fx := -11.0 + j * 3.1
 		var fc: Material = _m(fcols[j % fcols.size()], 0.5, 0.3)
 		for y in [0.1, 1.5]:
-			L._box(root, Vector3(3.0, 0.06, 0.06), Vector3(fx, y, 6.2), fc)
+			L._box(root, Vector3(fx, y, 6.2), Vector3(3.0, 0.06, 0.06), fc)
 		for xx in [fx - 1.5, fx + 1.5]:
-			L._box(root, Vector3(0.06, 1.5, 0.06), Vector3(xx, 0.8, 6.2), fc)
+			L._box(root, Vector3(xx, 0.8, 6.2), Vector3(0.06, 1.5, 0.06), fc)
 		var mm := _m(fcols[j % fcols.size()], 0.6)
 		mm.albedo_color.a = 0.25
 		mm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		L._box(root, Vector3(2.9, 1.35, 0.02), Vector3(fx, 0.8, 6.2), mm)
+		L._box(root, Vector3(fx, 0.8, 6.2), Vector3(2.9, 1.35, 0.02), mm)
 
 
 # ---------------------------------------------------------------- Calle Artes 22 (Segundo Guada)
@@ -945,10 +945,10 @@ static func artes22(root: Node3D, town) -> void:
 	L._facade_box(house, town, w, 7.0, 6.2, 2, 1, Color(0.78, 0.45, 0.32), 9)
 	var white := _m(Color(0.93, 0.93, 0.92), 0.5)
 	for x in [-3.0, -0.2]:
-		L._box(house, Vector3(2.4, 2.2, 0.08), Vector3(x, 1.1, 0.04), white)     # portones del garaje
+		L._box(house, Vector3(x, 1.1, 0.04), Vector3(2.4, 2.2, 0.08), white)     # portones del garaje
 		for k in 5:
-			L._box(house, Vector3(2.35, 0.03, 0.1), Vector3(x, 0.3 + k * 0.4, 0.06), _m(Color(0.8, 0.8, 0.8)))
-	L._box(house, Vector3(w + 0.6, 0.12, 1.0), Vector3(0, 3.1, 0.4), _m(Color(0.35, 0.18, 0.1), 0.7))   # tejadillo
+			L._box(house, Vector3(x, 0.3 + k * 0.4, 0.06), Vector3(2.35, 0.03, 0.1), _m(Color(0.8, 0.8, 0.8)))
+	L._box(house, Vector3(0, 3.1, 0.4), Vector3(w + 0.6, 0.12, 1.0), _m(Color(0.35, 0.18, 0.1), 0.7))   # tejadillo
 	# la ventana del pepino (piso de arriba)
 	var win = load("res://scripts/ee_window.gd").new()
 	win.name = "VentanaPepino"
@@ -960,14 +960,14 @@ static func artes22(root: Node3D, town) -> void:
 	for seg in [[-w * 0.5, 2.6], [3.8, w * 0.5]]:
 		var L0: float = seg[1] - seg[0]
 		var cx: float = (seg[0] + seg[1]) * 0.5
-		L._box(root, Vector3(L0, 0.9, 0.35), Vector3(cx, 0.45, -0.2), stone, true)
-		L._box(root, Vector3(L0, 1.0, 0.04), Vector3(cx, 1.4, -0.2), brown)
-		L._box(root, Vector3(L0, 0.05, 0.07), Vector3(cx, 1.92, -0.2), brown)
-	var gate := L._box(root, Vector3(1.2, 1.8, 0.05), Vector3(3.2, 0.9, -0.2), _m(Color(0.1, 0.12, 0.1), 0.5, 0.4))
+		L._box(root, Vector3(cx, 0.45, -0.2), Vector3(L0, 0.9, 0.35), stone, true)
+		L._box(root, Vector3(cx, 1.4, -0.2), Vector3(L0, 1.0, 0.04), brown)
+		L._box(root, Vector3(cx, 1.92, -0.2), Vector3(L0, 0.05, 0.07), brown)
+	var gate := L._box(root, Vector3(3.2, 0.9, -0.2), Vector3(1.2, 1.8, 0.05), _m(Color(0.1, 0.12, 0.1), 0.5, 0.4))
 	gate.name = "cancela"
-	var plate := L._box(root, Vector3(0.35, 0.25, 0.04), Vector3(4.2, 1.2, -0.0), _m(Color(0.9, 0.88, 0.82)))
+	var plate := L._box(root, Vector3(4.2, 1.2, -0.0), Vector3(0.35, 0.25, 0.04), _m(Color(0.9, 0.88, 0.82)))
 	L._label(plate, "22", Vector3(0, 0, 0.03), 48, Color(0.1, 0.1, 0.1), 0.004)
-	L._box(root, Vector3(0.3, 0.3, 0.2), Vector3(4.2, 1.5, -0.1), _m(Color(0.15, 0.3, 0.15)))       # buzón
+	L._box(root, Vector3(4.2, 1.5, -0.1), Vector3(0.3, 0.3, 0.2), _m(Color(0.15, 0.3, 0.15)))       # buzón
 	# portal al skatepark, en la calle a unos metros de la casa
 	var portal := Portal.new()
 	portal.master = true

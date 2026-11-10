@@ -464,7 +464,7 @@ func _physics_process(delta: float) -> void:
 			_place(s)
 			_carry(t0, body.global_transform)
 			# niebla espesa en el trayecto (fuera de las zonas con detalle)
-			var fog := not riders.is_empty() and not town.in_detail(_pos(s), 15.0)
+			var fog: bool = not riders.is_empty() and not town.in_detail(_pos(s), 15.0)
 			if fog != travel_fog:
 				travel_fog = fog
 				if game and game.has_method("set_travel_fog"):

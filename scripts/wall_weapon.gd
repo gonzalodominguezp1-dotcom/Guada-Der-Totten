@@ -5,11 +5,14 @@ extends Node3D
 const Weapons = preload("res://scripts/weapons.gd")
 
 var weapon_id := "escopeta"
+var board := false      # tablón de madera con patas (cuando no hay pared detrás)
 
 
 func _ready() -> void:
 	add_to_group("interactables")
 	var info := Weapons.data(weapon_id)
+	if board:
+		_board()
 	# silueta de tiza
 	var chalk := StandardMaterial3D.new()
 	chalk.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -81,3 +84,34 @@ func interact(player) -> void:
 			return
 		player.give_weapon(weapon_id)
 	Sfx.play("purchase", -4.0)
+
+
+## Tablón de obra apoyado en dos patas, como en los mapas de WaW
+func _board() -> void:
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color(0.36, 0.26, 0.16)
+	wood.roughness = 0.9
+	var dark := StandardMaterial3D.new()
+	dark.albedo_color = Color(0.2, 0.14, 0.09)
+	for k in 4:
+		_bx(Vector3(1.5, 0.2, 0.04), Vector3(0, -0.36 + k * 0.22, -0.05), wood if k % 2 == 0 else dark)
+	for x in [-0.6, 0.6]:
+		_bx(Vector3(0.08, 1.9, 0.08), Vector3(x, -0.5, -0.1), dark)
+	var sb := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(1.5, 1.9, 0.15)
+	cs.shape = bs
+	cs.position = Vector3(0, -0.5, -0.08)
+	sb.add_child(cs)
+	add_child(sb)
+
+
+func _bx(s: Vector3, pos: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = s
+	mi.mesh = bm
+	mi.material_override = mat
+	mi.position = pos
+	add_child(mi)

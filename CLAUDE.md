@@ -46,7 +46,7 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   La navmesh grande tarda unos segundos en estar lista (los tests esperan a `_main_nav_ready`).
 - Skatepark (`scripts/skatepark.gd`): nivel aparte; según se entra, a la derecha en línea quarter,
   meseta y plano inclinado; a la izquierda barandilla y olas (piezas extruidas con `_profile`); "el colega" (zombie special "npc", cara en
-  assets/npc/cara.png) suelta el "calzoncillo"; con el pepino aparece la estatua del culo:
+  assets/npc/cara.png) se queda quieto y con [F] le quitas el "calzoncillo"; con el pepino aparece la estatua del culo:
   10 muertes cerca con "zurraspa_pap" y luego [F] para meterle el pepino. Especiales (panzer, npc)
   no cuentan en la ronda (round_manager.spawn_special); zombies lejos/atascados reaparecen.
 - Edificios a mano sin interior (Sala Groove nº 6) en `scripts/landmarks.gd`; su posición
@@ -54,12 +54,22 @@ arrancar (no hay escenas .tscn salvo main.tscn). Comunicación con el usuario en
   delante de Casa de la Juventud y Hogar del Mayor.
 - Fachadas: `shaders/facade.gdshader`, COLOR.a = tipo*64 + estilo*16 + semilla
   (tipo: enlucido/granito/ladrillo/piedra; estilo: clásico/moderno/tiendas o hexagonal/público).
-- Armas en `scripts/weapons.gd`: "sight_y" y "ads" alinean la mira al apuntar.
+- Armas en `scripts/weapons.gd`: "sight_y" y "ads" alinean la mira al apuntar. Armas WaW (kar98,
+  mp40, thompson, stg44; mg42 y raygun solo en la caja) con modelo genérico `_longgun` (clave
+  "model"). `data(id)` da a las normales Pack-a-Punch automático "<id>_pap" (camuflaje `_camo`).
+- Reparto (`scripts/loadout.gd`, tabla SPOTS en coordenadas locales de cada prefab/nivel):
+  armas de pared (tablón con patas si no hay pared), caja mágica (`scripts/mystery_box.gd`,
+  950, osito y se mueve; empieza en el bar) y perks: Quick Revive (bar), Speed Cola (L'Antica),
+  Juggernog (poli), Double Tap (Plaza Consistorial). Prueba: `tests/loadout_test.gd`.
+- Coches aparcados y contenedores: `scripts/street_props.gd` (MultiMesh, colisión con cajas; nada en
+  la ruta del bus, cruces, puertas de zona ni plazas).
+- OJO: `Landmarks._box(parent, POS, SIZE, mat, colisión)` — primero la posición y luego el tamaño.
 - Vallas en MultiMesh: usar `basis.scaled_local()` (con `scaled()` la escala va en ejes globales y
   las piezas salen torcidas/cruzadas).
 - Puertas comprables en capa 16 (excluida de la navmesh, no hace falta rehornear).
 - Barricadas: capa 8 (bloquean jugador y zombies, no balas).
 - Sonidos: `python3 tools/make_sounds.py assets/sounds` (sintetizados).
 - Prueba: `godot --headless --path . --import` y luego
-  `godot --headless --path . -s tests/smoke_test.gd --fixed-fps 60` → debe acabar en "RESULTADO: OK".
+  `godot --headless --path . -s tests/smoke_test.gd --fixed-fps 60` → debe acabar en "RESULTADO: OK"
+  (tarda bastantes minutos). También `tests/loadout_test.gd` y `tests/bus_ride.gd`.
 - Capturas: xvfb-run + `--rendering-method gl_compatibility`.

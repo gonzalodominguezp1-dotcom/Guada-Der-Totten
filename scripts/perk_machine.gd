@@ -1,9 +1,14 @@
 extends StaticBody3D
-## Máquina de perks. Por ahora: Quick Revive (en solitario te levanta
-## sola cuando caes, hasta 3 veces por partida).
+## Máquinas de perks (las 4 de World at War):
+##  Quick Revive (en solitario te levanta sola cuando caes, hasta 3 veces),
+##  Juggernog (aguantas más golpes), Speed Cola (recargas el doble de rápido)
+##  y Double Tap (disparas más rápido).
 
 const PERKS := {
 	"quick_revive": {"name": "Quick Revive", "cost": 500, "color": Color(0.35, 0.75, 1.0)},
+	"juggernog": {"name": "Juggernog", "cost": 2500, "color": Color(0.95, 0.15, 0.12)},
+	"speed_cola": {"name": "Speed Cola", "cost": 3000, "color": Color(0.25, 0.9, 0.3)},
+	"double_tap": {"name": "Double Tap", "cost": 2000, "color": Color(1.0, 0.65, 0.1)},
 }
 
 var perk := "quick_revive"

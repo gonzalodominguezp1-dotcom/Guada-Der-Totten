@@ -35,7 +35,8 @@ void fragment() {
 }
 """
 
-const PERK_COLORS := {"quick_revive": Color(0.35, 0.75, 1.0)}
+const PERK_COLORS := {"quick_revive": Color(0.35, 0.75, 1.0), "juggernog": Color(0.95, 0.15, 0.12),
+	"speed_cola": Color(0.25, 0.9, 0.3), "double_tap": Color(1.0, 0.65, 0.1)}
 
 
 func _ready() -> void:

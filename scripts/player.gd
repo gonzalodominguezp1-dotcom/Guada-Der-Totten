@@ -191,6 +191,9 @@ func refill_all_ammo() -> void:
 func give_weapon(id: String) -> void:
 	var d := Weapons.data(id)
 	ammo[id] = {"mag": d["mag"], "reserve": d["reserve"]}
+	if weapons.has(id):   # ya la tienes: munición llena y a la mano
+		_equip(weapons.find(id))
+		return
 	if weapons.size() < 2:
 		weapons.append(id)
 		_equip(weapons.size() - 1)
@@ -450,7 +453,7 @@ func shoot() -> void:
 		reload()
 		return
 	ammo[id]["mag"] -= 1
-	fire_cd = d["fire_delay"]
+	fire_cd = d["fire_delay"] * (0.75 if has_perk("double_tap") else 1.0)
 	recoil = 1.0
 	muzzle.light_energy = 6.0
 	flash_t = 0.045
@@ -660,8 +663,9 @@ func reload() -> void:
 		return
 	reloading = true
 	_update_hud()
-	Sfx.play("reload", -4.0, 1.5 / d["reload"] if d["reload"] > 1.6 else 1.0)
-	await get_tree().create_timer(d["reload"]).timeout
+	var rt: float = d["reload"] * (0.5 if has_perk("speed_cola") else 1.0)
+	Sfx.play("reload", -4.0, 1.5 / rt if rt > 1.6 else 1.0)
+	await get_tree().create_timer(rt).timeout
 	if dead or not is_inside_tree() or not reloading or weapon_id() != id:
 		return
 	var take: int = mini(d["mag"] - ammo[id]["mag"], ammo[id]["reserve"])
@@ -776,9 +780,11 @@ func drink_perk(p: String) -> void:
 	cm.height = 0.2
 	bottle.mesh = cm
 	var bm := StandardMaterial3D.new()
-	bm.albedo_color = Color(0.35, 0.75, 1.0)
+	var pc: Color = {"juggernog": Color(0.95, 0.15, 0.12), "speed_cola": Color(0.25, 0.9, 0.3),
+		"double_tap": Color(1.0, 0.65, 0.1)}.get(p, Color(0.35, 0.75, 1.0))
+	bm.albedo_color = pc
 	bm.emission_enabled = true
-	bm.emission = Color(0.2, 0.5, 0.9)
+	bm.emission = pc.darkened(0.3)
 	bottle.material_override = bm
 	bottle.layers = 1 | (1 << 19)
 	camera.add_child(bottle)
@@ -795,8 +801,12 @@ func drink_perk(p: String) -> void:
 	drinking = false
 	if not p in perks:
 		perks.append(p)
+	if p == "juggernog":
+		max_health = 250.0
+		health = max_health
 	if hud:
 		hud.set_perks(perks)
+		hud.set_health(health / max_health)
 
 
 # ---------------------------------------------------------------- daño

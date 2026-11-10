@@ -23,6 +23,61 @@ const DATA := {
 		"cost": 500, "hip": Vector3(0.16, -0.18, -0.36), "ads": Vector3(0.0, -0.055, -0.22),
 		"sight_y": 0.059, "muzzle": Vector3(0, 0.03, -0.70), "ads_fov": 62.0,
 	},
+	# ---- armas de pared y de la caja (estilo World at War)
+	"kar98": {
+		"name": "Kar98k",
+		"damage": 180.0, "pellets": 1, "mag": 5, "reserve": 50,
+		"fire_delay": 0.95, "reload": 3.0, "auto": false,
+		"spread_hip": 0.03, "spread_ads": 0.0, "range": 200.0, "falloff": 999.0,
+		"recoil": 2.0, "kick": 0.045, "sound": "pistol_shot", "pitch": 0.72, "volume": 1.0,
+		"cost": 200, "hip": Vector3(0.16, -0.18, -0.36), "ads": Vector3(0.0, -0.055, -0.22), "sight_y": 0.059, "ads_fov": 58.0, "muzzle": Vector3(0, 0.03, -0.78),
+		"model": {"recv": 0.2, "barrel": 0.56, "stock": "rifle", "mag": "none", "fore": 0.42, "bolt": true},
+	},
+	"mp40": {
+		"name": "MP40",
+		"damage": 45.0, "pellets": 1, "mag": 32, "reserve": 192,
+		"fire_delay": 0.1, "reload": 2.3, "auto": true,
+		"spread_hip": 0.04, "spread_ads": 0.012, "range": 120.0, "falloff": 999.0,
+		"recoil": 0.6, "kick": 0.012, "sound": "pistol_shot", "pitch": 1.25, "volume": -5.0,
+		"cost": 1000, "hip": Vector3(0.16, -0.18, -0.36), "ads": Vector3(0.0, -0.055, -0.22), "sight_y": 0.059, "ads_fov": 58.0, "muzzle": Vector3(0, 0.03, -0.46),
+		"model": {"recv": 0.24, "barrel": 0.2, "stock": "folding", "mag": "stick", "fore": 0.0},
+	},
+	"thompson": {
+		"name": "Thompson",
+		"damage": 50.0, "pellets": 1, "mag": 30, "reserve": 180,
+		"fire_delay": 0.085, "reload": 2.4, "auto": true,
+		"spread_hip": 0.045, "spread_ads": 0.014, "range": 110.0, "falloff": 999.0,
+		"recoil": 0.7, "kick": 0.013, "sound": "pistol_shot", "pitch": 1.1, "volume": -4.0,
+		"cost": 1200, "hip": Vector3(0.16, -0.18, -0.36), "ads": Vector3(0.0, -0.055, -0.22), "sight_y": 0.059, "ads_fov": 58.0, "muzzle": Vector3(0, 0.03, -0.5),
+		"model": {"recv": 0.24, "barrel": 0.24, "stock": "wood", "mag": "stick", "fore": 0.12, "fins": true},
+	},
+	"stg44": {
+		"name": "StG 44",
+		"damage": 70.0, "pellets": 1, "mag": 30, "reserve": 180,
+		"fire_delay": 0.11, "reload": 2.6, "auto": true,
+		"spread_hip": 0.045, "spread_ads": 0.01, "range": 160.0, "falloff": 999.0,
+		"recoil": 0.9, "kick": 0.018, "sound": "pistol_shot", "pitch": 0.92, "volume": -2.5,
+		"cost": 1200, "hip": Vector3(0.16, -0.18, -0.36), "ads": Vector3(0.0, -0.055, -0.22), "sight_y": 0.059, "ads_fov": 58.0, "muzzle": Vector3(0, 0.03, -0.62),
+		"model": {"recv": 0.3, "barrel": 0.3, "stock": "wood", "mag": "curved", "fore": 0.16},
+	},
+	"mg42": {
+		"name": "MG42",
+		"damage": 75.0, "pellets": 1, "mag": 125, "reserve": 375,
+		"fire_delay": 0.055, "reload": 4.6, "auto": true,
+		"spread_hip": 0.07, "spread_ads": 0.025, "range": 160.0, "falloff": 999.0,
+		"recoil": 1.0, "kick": 0.02, "sound": "pistol_shot", "pitch": 0.85, "volume": -1.0,
+		"cost": 0, "box_only": true, "hip": Vector3(0.16, -0.18, -0.36), "ads": Vector3(0.0, -0.055, -0.22), "sight_y": 0.059, "ads_fov": 58.0, "muzzle": Vector3(0, 0.03, -0.82),
+		"model": {"recv": 0.34, "barrel": 0.46, "stock": "wood", "mag": "drum", "fore": 0.0, "jacket": true},
+	},
+	"raygun": {
+		"name": "Pistola de Rayos",
+		"damage": 1000.0, "pellets": 1, "mag": 20, "reserve": 160,
+		"fire_delay": 0.32, "reload": 2.8, "auto": false,
+		"spread_hip": 0.012, "spread_ads": 0.002, "range": 120.0, "falloff": 999.0,
+		"recoil": 1.2, "kick": 0.015, "sound": "pistol_shot", "pitch": 1.9, "volume": -2.0,
+		"cost": 0, "box_only": true, "hip": Vector3(0.17, -0.165, -0.40), "ads": Vector3(0.0, -0.06, -0.30),
+		"sight_y": 0.064, "muzzle": Vector3(0, 0.035, -0.26), "ads_fov": 60.0,
+	},
 	# Arma maravilla del mapa: se monta con 3 piezas en la mesa de trabajo.
 	# Ficha del colega de Gonzalo: ráfaga de chorros, daño alto de cerca que baja
 	# con la distancia (alcance medio), un solo cargador grande sin reserva.
@@ -59,8 +114,48 @@ const DATA := {
 }
 
 
+static var _pap_cache := {}
+
+
+## Las armas normales tienen versión Pack-a-Punch automática: "<id>_pap"
+## (doble de daño, más munición y camuflaje). Las maravilla la definen a mano.
 static func data(id: String) -> Dictionary:
-	return DATA[id]
+	if DATA.has(id):
+		var d: Dictionary = DATA[id]
+		if not d.has("pap") and not d.has("gold") and not d.has("spray") and not d.has("wave"):
+			if not _pap_cache.has("+" + id):
+				var dd := d.duplicate()
+				dd["pap"] = id + "_pap"
+				_pap_cache["+" + id] = dd
+			return _pap_cache["+" + id]
+		return d
+	if _pap_cache.has(id):
+		return _pap_cache[id]
+	var base_id := id.trim_suffix("_pap")
+	var b: Dictionary = DATA[base_id].duplicate()
+	b.erase("pap")
+	b["name"] = {"pistola": "Mustang y Sally", "escopeta": "Escopeta del Infierno", "kar98": "Kar98k Armageddon",
+		"mp40": "El Afterburner", "thompson": "Gibs-o-matic", "stg44": "Spatz-447 +", "mg42": "Barracuda FU-A11",
+		"raygun": "Porter's X2 Ray Gun"}.get(base_id, b["name"] + " +")
+	b["damage"] = b["damage"] * 2.0
+	b["mag"] = int(b["mag"] * 1.5)
+	b["reserve"] = int(b["reserve"] * 1.6)
+	b["reload"] = b["reload"] * 0.8
+	b["pitch"] = b["pitch"] * 0.85
+	b["camo"] = true
+	_pap_cache[id] = b
+	return b
+
+
+## Armas que puede dar la caja mágica
+static func box_pool() -> Array:
+	var out := []
+	for id in DATA:
+		var d: Dictionary = DATA[id]
+		if id == "pistola" or d.has("spray") or d.has("wave") or d.has("gold"):
+			continue
+		out.append(id)
+	return out
 
 
 # ---------------------------------------------------------------- materiales
@@ -183,6 +278,32 @@ static func _mat(key: String) -> StandardMaterial3D:
 			m.emission_enabled = true
 			m.emission = Color(1.0, 0.82, 0.15)
 			m.emission_energy_multiplier = 2.5
+		"camo":
+			m.albedo_color = Color(0.38, 0.24, 0.62)
+			m.metallic = 0.4
+			m.roughness = 0.35
+			m.albedo_texture = nt
+			m.uv1_triplanar = true
+			m.uv1_scale = Vector3(30, 30, 30)
+			m.emission_enabled = true
+			m.emission = Color(0.25, 0.1, 0.5)
+			m.emission_energy_multiplier = 0.4
+		"camo_dark":
+			m.albedo_color = Color(0.16, 0.1, 0.3)
+			m.metallic = 0.4
+			m.roughness = 0.4
+			m.albedo_texture = nt
+			m.uv1_triplanar = true
+			m.uv1_scale = Vector3(30, 30, 30)
+		"ray_body":
+			m.albedo_color = Color(0.55, 0.57, 0.6)
+			m.metallic = 0.7
+			m.roughness = 0.3
+		"ray_glow":
+			m.albedo_color = Color(1.0, 0.15, 0.1)
+			m.emission_enabled = true
+			m.emission = Color(1.0, 0.1, 0.05)
+			m.emission_energy_multiplier = 2.0
 		"copper":
 			m.albedo_color = Color(0.72, 0.40, 0.22)
 			m.metallic = 1.0
@@ -285,13 +406,113 @@ static func build_model(id: String, with_hands := false) -> Node3D:
 			_shotgun(root)
 			if with_hands:
 				_shotgun_hands(root)
+		"raygun":
+			_raygun(root)
+			if with_hands:
+				_pistol_hands(root)
 		"zurraspa", "zurraspa_pap":
 			_zurraspa(root)
 			if id == "zurraspa_pap":
 				_gild(root)
 			if with_hands:
 				_pistol_hands(root)
+		_:
+			if id.ends_with("_pap") and DATA.has(id.trim_suffix("_pap")):
+				root.free()
+				var inner := build_model(id.trim_suffix("_pap"), with_hands)
+				inner.name = id
+				_camo(inner)
+				return inner
+			elif DATA.has(id) and DATA[id].has("model"):
+				_longgun(root, DATA[id]["model"])
+				if with_hands:
+					_shotgun_hands(root)
 	return root
+
+
+## Camuflaje del Pack-a-Punch para las armas normales (como en WaW)
+static func _camo(root: Node3D) -> void:
+	var swap := {_mat("blued"): _mat("camo"), _mat("blued_dark"): _mat("camo_dark"), _mat("silver"): _mat("camo"),
+		_mat("ray_body"): _mat("camo")}
+	var stack: Array = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D and swap.has(n.material_override):
+			n.material_override = swap[n.material_override]
+		stack.append_array(n.get_children())
+
+
+## Arma larga genérica: cajón, cañón, culata, cargador y miras.
+## La línea de mira queda a y = 0.059 (como la escopeta) para que cuadre al apuntar.
+static func _longgun(root: Node3D, m: Dictionary) -> void:
+	var recv: float = m["recv"]
+	var barrel: float = m["barrel"]
+	var zr := -recv * 0.5 + 0.03
+	# cajón
+	_box(root, Vector3(0.042, 0.05, recv), Vector3(0, 0.025, zr), "blued")
+	_box(root, Vector3(0.03, 0.012, recv * 0.9), Vector3(0, 0.054, zr), "blued_dark")
+	# cañón
+	var zb := 0.03 - recv
+	if m.get("jacket", false):
+		_tube(root, 0.02, barrel * 0.8, Vector3(0, 0.03, zb - barrel * 0.4), "blued_dark", 10)
+		for k in 6:
+			_box(root, Vector3(0.042, 0.012, 0.03), Vector3(0, 0.03, zb - 0.05 - k * barrel * 0.12), "bore")
+	_tube(root, 0.011, barrel, Vector3(0, 0.03, zb - barrel * 0.5), "blued", 14)
+	_tube(root, 0.008, 0.012, Vector3(0, 0.03, zb - barrel), "bore", 10)
+	if m.get("fins", false):
+		for k in 5:
+			_tube(root, 0.016, 0.006, Vector3(0, 0.03, zb - 0.03 - k * 0.025), "blued_dark", 12)
+	# miras (punto a 0.059)
+	_box(root, Vector3(0.004, 0.012, 0.006), Vector3(0, 0.053, zb - barrel + 0.02), "blued_dark")
+	_sphere(root, 0.003, Vector3(0, 0.059, zb - barrel + 0.02), "silver")
+	_box(root, Vector3(0.026, 0.01, 0.01), Vector3(0, 0.061, 0.0), "blued_dark")
+	# guardamanos de madera
+	var fore: float = m.get("fore", 0.0)
+	if fore > 0.0:
+		_limb(root, Vector3(0, 0.012, zb + 0.02), Vector3(0, 0.012, zb + 0.02 - fore), 0.021, "walnut", 1.15)
+	# cerrojo
+	if m.get("bolt", false):
+		_box(root, Vector3(0.05, 0.008, 0.008), Vector3(0.03, 0.045, 0.0), "silver")
+		_sphere(root, 0.009, Vector3(0.055, 0.045, 0.0), "silver")
+	# cargador
+	match str(m.get("mag", "none")):
+		"stick":
+			_box(root, Vector3(0.022, 0.15, 0.034), Vector3(0, -0.07, zr - recv * 0.25), "blued_dark")
+		"curved":
+			_box(root, Vector3(0.022, 0.08, 0.04), Vector3(0, -0.035, zr - recv * 0.2), "blued_dark", Vector3(-0.15, 0, 0))
+			_box(root, Vector3(0.022, 0.08, 0.04), Vector3(0, -0.105, zr - recv * 0.2 - 0.02), "blued_dark", Vector3(-0.4, 0, 0))
+		"drum":
+			_tube(root, 0.055, 0.05, Vector3(-0.045, -0.02, zr), "blued_dark", 16)
+	# empuñadura de pistola y gatillo
+	_box(root, Vector3(0.03, 0.09, 0.034), Vector3(0, -0.04, 0.06), "grip", Vector3(0.25, 0, 0))
+	_box(root, Vector3(0.008, 0.005, 0.06), Vector3(0, -0.02, 0.01), "blued")
+	# culata
+	match str(m.get("stock", "wood")):
+		"wood":
+			_limb(root, Vector3(0, 0.0, 0.08), Vector3(0, -0.045, 0.36), 0.026, "walnut", 0.8)
+			_box(root, Vector3(0.04, 0.1, 0.02), Vector3(0, -0.045, 0.37), "rubber", Vector3(-0.1, 0, 0))
+		"rifle":
+			_limb(root, Vector3(0, 0.005, -0.04), Vector3(0, -0.02, 0.12), 0.022, "walnut", 1.0)
+			_limb(root, Vector3(0, -0.02, 0.12), Vector3(0, -0.06, 0.38), 0.03, "walnut", 0.8)
+		"folding":
+			_box(root, Vector3(0.008, 0.008, 0.28), Vector3(0.016, 0.0, 0.2), "blued_dark", Vector3(0.1, 0, 0))
+			_box(root, Vector3(0.008, 0.008, 0.28), Vector3(-0.016, 0.0, 0.2), "blued_dark", Vector3(0.1, 0, 0))
+			_box(root, Vector3(0.04, 0.07, 0.012), Vector3(0, -0.02, 0.34), "blued_dark")
+
+
+## Pistola de Rayos: cuerpo rechoncho con aletas y anillos rojos
+static func _raygun(root: Node3D) -> void:
+	_box(root, Vector3(0.036, 0.05, 0.14), Vector3(0, 0.03, -0.04), "ray_body")
+	_tube(root, 0.024, 0.14, Vector3(0, 0.035, -0.17), "ray_body", 16)
+	for k in 3:
+		_tube(root, 0.03, 0.012, Vector3(0, 0.035, -0.13 - k * 0.04), "ray_glow", 16)
+	_tube(root, 0.012, 0.02, Vector3(0, 0.035, -0.25), "ray_glow", 12)
+	for x in [-0.03, 0.03]:
+		_box(root, Vector3(0.012, 0.05, 0.07), Vector3(x, 0.03, -0.06), "ray_body", Vector3(0.0, 0, 0.3 * signf(x)))
+	_box(root, Vector3(0.004, 0.01, 0.006), Vector3(0, 0.059, -0.22), "blued_dark")
+	_sphere(root, 0.003, Vector3(0, 0.064, -0.22), "ray_glow")
+	_box(root, Vector3(0.026, 0.01, 0.01), Vector3(0, 0.066, 0.02), "blued_dark")
+	_box(root, Vector3(0.03, 0.1, 0.035), Vector3(0, -0.035, 0.03), "grip", Vector3(0.25, 0, 0))
 
 
 static func _pistol(root: Node3D) -> void:
